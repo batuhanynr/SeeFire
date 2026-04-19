@@ -20,8 +20,8 @@ MOTOR_ENA, MOTOR_ENB = 12, 13
 # Sensor Integration (M3)
 TRIG_LEFT, ECHO_LEFT = 23, 24
 TRIG_RIGHT, ECHO_RIGHT = 25, 8
-DHT22_PIN = 4
 MQ2_CS_PIN = 5
+MQ2_ADC_CH = 0
 
 # Alarm Outputs (M2/M6)
 LED_PIN = 26
@@ -30,7 +30,6 @@ BUZZER_PIN = 19
 # --- I2C Addresses ---
 
 MLX90614_ADDR = 0x5A
-MPU6050_ADDR = 0x68
 
 # --- Detection Thresholds ---
 
@@ -64,7 +63,7 @@ def validate_gpio_pins() -> None:
         "MOTOR_ENA": MOTOR_ENA, "MOTOR_ENB": MOTOR_ENB,
         "TRIG_LEFT": TRIG_LEFT, "ECHO_LEFT": ECHO_LEFT,
         "TRIG_RIGHT": TRIG_RIGHT, "ECHO_RIGHT": ECHO_RIGHT,
-        "DHT22_PIN": DHT22_PIN, "MQ2_CS_PIN": MQ2_CS_PIN,
+        "MQ2_CS_PIN": MQ2_CS_PIN,
         "LED_PIN": LED_PIN, "BUZZER_PIN": BUZZER_PIN,
     }
     seen = {}
