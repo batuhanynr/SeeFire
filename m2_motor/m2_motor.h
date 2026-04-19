@@ -11,7 +11,7 @@
  * Changelog:
  * v0.1 (2025-03-01) - Initial draft: motor_drive, motor_stop, set_alarm
  */
-
+ 
 #include <stdint.h>
 #include <stdbool.h>
 
