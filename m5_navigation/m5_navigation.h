@@ -106,12 +106,10 @@ m5_status_t m5_get_nav_status(m5_nav_status_t *status_out);
  *        Called internally by the navigation thread; exposed for testing.
  * @param ultrasonic_left_cm   Distance from left HC-SR04 (cm).
  * @param ultrasonic_right_cm  Distance from right HC-SR04 (cm).
- * @param imu_heading_deg      Current IMU yaw (0–360°).
  * @return M5_OK on success.
  */
 m5_status_t m5_update_navigation(float ultrasonic_left_cm,
-                                  float ultrasonic_right_cm,
-                                  float imu_heading_deg);
+                                  float ultrasonic_right_cm);
 
 /**
  * @brief Save the current occupancy grid to a JSON file.

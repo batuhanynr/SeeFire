@@ -4,7 +4,7 @@
 /**
  * @file m4_vision.h
  * @brief AI & Vision Pipeline - public interface (YOLOv8n + OpenCV)
- * @author Emre Can Tuncer (200104004115) Semih Sarkoca (220104004038)
+ * @author Emre Can Tuncer (200104004115), Semih Sarkoca (220104004038)
  * @date 2025-03-01
  * @version 0.1
  *

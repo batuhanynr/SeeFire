@@ -2,7 +2,7 @@
 
 One-sentence purpose: Runs the five-state finite-state machine (INIT → EXPLORE → PATROL → VERIFY → ALARM) that fuses sensor and vision inputs to control robot behaviour and trigger alarms.
 
-**Author:** Semih Sarkoca (220104004038), Ahmet Furkan Arslan (220104004044), Halil Buğra Şen (230104004088)
+**Author:** Emre Can Tuncer (200104004115), Semih Sarkoca (220104004038), Ahmet Furkan Arslan (220104004044), Halil Buğra Şen (230104004088)
 **Module ID:** M6  
 **Version:** 0.1
 
@@ -12,6 +12,7 @@ One-sentence purpose: Runs the five-state finite-state machine (INIT → EXPLORE
 
 | Dependency | Type | Notes |
 |---|---|---|
+| Multiprocessing Architecture | Architecture | **CRITICAL:** M6 FSM and M5 Navigation must run in separate processes from M4 Vision to prevent YOLO inference bottlenecks from delaying sensor polling (HC-SR04), which would cause collisions. |
 | M2 `m2_set_alarm()`, `m2_get_battery_voltage()` | Module | Alarm output and low-battery monitoring |
 | M3 `m3_get_fusion_sensors()` | Module | Polled every ~500 ms |
 | M4 `m4_get_latest_result()`, `m4_capture_snapshot()` | Module | Vision input each FSM iteration |

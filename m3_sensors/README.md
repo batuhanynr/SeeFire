@@ -1,6 +1,6 @@
 # M3_SENSORS — Sensor Integration Hub
 
-One-sentence purpose: Drivers and calibration for MQ-2, MLX90614, DHT22, HC-SR04 (×2), and MPU6050; exposes a unified fusion API for M6 and a navigation API for M5.
+One-sentence purpose: Drivers and calibration for MQ-2, MLX90614, and HC-SR04 (×2); exposes a unified fusion API for M6 and a navigation API for M5.
 
 **Author:** Alperen Şahin (220104004943), Bekir Emre Sarpınar (220104004039), Batuhan Yanar (220104004059)  
 **Module ID:** M3  
@@ -13,11 +13,13 @@ One-sentence purpose: Drivers and calibration for MQ-2, MLX90614, DHT22, HC-SR04
 | Dependency | Type | Notes |
 |---|---|---|
 | M1 (Chassis) | Hardware | Sensors must be physically mounted first |
-| RPi.GPIO ≥ 0.7.1 | Python package | MQ-2, HC-SR04 GPIO |
-| smbus2 ≥ 0.4.1 | Python package | I2C for MLX90614 and MPU6050 |
+| Logic Level Converter | Hardware | **CRITICAL:** Steps down 5V lines (HC-SR04 ECHO) to 3.3V to protect Pi GPIO pins |
+| MCP3208/MCP3008 ADC | Hardware | **CRITICAL:** Raspberry Pi has no analog inputs. MQ-2 analog pin MUST connect via SPI ADC to get true 0-1023 smoke readings, not digital thresholds. |
+| I2C Wiring Constraint | Hardware | I2C jumper wires (MLX90614) must stay < 15-20cm to prevent signal loss/lockup. Wrap reads in `try-except`. |
+| RPi.GPIO ≥ 0.7.1 | Python package | HC-SR04 GPIO |
+| spidev | Python package | SPI communication for ADC |
+| smbus2 ≥ 0.4.1 | Python package | I2C for MLX90614 |
 | adafruit-circuitpython-mlx90614 | Python package | IR temperature driver |
-| mpu6050-raspberrypi ≥ 1.2 | Python package | IMU driver |
-| Adafruit_DHT ≥ 1.4.0 | Python package | DHT22 ambient temp/humidity |
 | I2C enabled on RPi OS | OS config | `sudo raspi-config → Interfaces → I2C` |
 
 ---
@@ -45,7 +47,6 @@ int main(void) {
     if (m3_get_navigation_sensors(&nav) == M3_OK) {
         float left  = nav.ultrasonic.left_cm;
         float right = nav.ultrasonic.right_cm;
-        float yaw   = nav.imu_heading;
         // Feed into wall-following algorithm
     }
 
@@ -65,8 +66,7 @@ int main(void) {
 | `m3_set_ir_temp_threshold(threshold_c)` | `float` | `m3_status_t` | Default: 60.0 °C |
 | `m3_get_fusion_sensors(data_out)` | `m3_fusion_data_t *` | `m3_status_t` | Called by M6 ~500 ms |
 | `m3_get_ultrasonic_distances(data_out)` | `m3_ultrasonic_t *` | `m3_status_t` | Called by M5 ~100 ms |
-| `m3_get_imu_heading(heading_out)` | `float *` | `m3_status_t` | Returns 0–360 ° |
-| `m3_get_navigation_sensors(data_out)` | `m3_nav_data_t *` | `m3_status_t` | Ultrasonic + IMU in one call |
+| `m3_get_navigation_sensors(data_out)` | `m3_nav_data_t *` | `m3_status_t` | Ultrasonic in one call |
 | `m3_cleanup()` | — | `m3_status_t` | Releases GPIO and I2C |
 
 ---
@@ -75,7 +75,6 @@ int main(void) {
 
 - MQ-2 requires a warm-up period (~60 s) before readings are stable; cold-start readings should be discarded.
 - MCP3208 ADC SPI wiring for MQ-2 must be confirmed with M1 before final integration.
-- MPU6050 drift compensation (gyro integration) is not yet implemented; heading accuracy degrades over long runs.
 
 ---
 

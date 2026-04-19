@@ -4,14 +4,14 @@
 /**
  * @file m2_motor.h
  * @brief Motor Control & Power Management - public interface
- * @author Emre Can Tuncer (200104004115)  Bekir Emre Sarpinar (220104004039)
+ * @author Bekir Emre Sarpinar (220104004039)
  * @date 2025-03-01
  * @version 0.1
  *
  * Changelog:
  * v0.1 (2025-03-01) - Initial draft: motor_drive, motor_stop, set_alarm
  */
- 
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -19,8 +19,8 @@
 #define M2_PWM_FREQ_HZ        1000    /**< Recommended PWM frequency for L298N */
 #define M2_SPEED_MIN          0       /**< Minimum duty cycle (%) */
 #define M2_SPEED_MAX          100     /**< Maximum duty cycle (%) */
-#define M2_BATTERY_LOW_V      9.6f    /**< Low battery warning threshold (V) */
-#define M2_BATTERY_CRIT_V     8.4f    /**< Critical battery threshold (V) */
+#define M2_BATTERY_LOW_V      7.2f    /**< Low battery warning threshold (V) */
+#define M2_BATTERY_CRIT_V     6.6f    /**< Critical battery threshold (V) */
 
 /* GPIO Pin assignments (mirrored from config.py) */
 #define M2_PIN_IN1            17
@@ -98,7 +98,8 @@ m2_status_t m2_motor_stop(void);
 m2_status_t m2_motor_turn(float angle_deg, uint8_t speed);
 
 /**
- * @brief Read the current LiPo battery voltage via ADC voltage divider.
+ * @brief Read the current LiPo battery voltage via ADC.
+ *        Requires a Voltage Divider (e.g. R1=30k, R2=10k) to step down 12.6V to max 3.15V.
  * @param voltage_out  Pointer to float where measured voltage (V) is stored.
  * @return M2_OK on success, M2_ERR_HARDWARE on ADC read failure.
  */

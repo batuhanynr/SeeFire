@@ -2,7 +2,7 @@
 
 One-sentence purpose: Controls the L298N H-bridge to drive the 4WD chassis and manages LiPo battery monitoring, alarm LED, and buzzer.
 
-**Author:** Bekir Emre Sarpınar (220104004039), Emre Can Tuncer (200104004115)
+**Author:** Bekir Emre Sarpınar (220104004039)
 **Module ID:** M2  
 **Version:** 0.1
 
@@ -13,6 +13,7 @@ One-sentence purpose: Controls the L298N H-bridge to drive the 4WD chassis and m
 | Dependency | Type | Notes |
 |---|---|---|
 | M1 (Chassis) | Hardware | Robot must be physically assembled before motor testing |
+| LM2596 Buck Converter | Hardware | **CRITICAL:** Steps down LiPo to 5V to safely power the Raspberry Pi, isolating it from motor voltage drops |
 | RPi.GPIO ≥ 0.7.1 | Python package | `sudo apt install python3-rpi.gpio` |
 | `time` (stdlib) | Python package | PWM timing |
 
@@ -72,7 +73,6 @@ int main(void) {
 
 ## Known Limitations & TODOs
 
-- `m2_motor_turn()` uses timed dead-reckoning; accuracy degrades on uneven surfaces. IMU-assisted turning (M3 MPU6050) is planned for v0.2.
 - Battery ADC requires a hardware voltage divider on the LiPo output; exact resistor values must be confirmed with M1.
 - PWM frequency is fixed at 1 kHz; dynamic adjustment not yet supported.
 

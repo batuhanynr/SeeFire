@@ -4,7 +4,7 @@
 /**
  * @file m6_decision.h
  * @brief Decision Engine (FSM) - public interface
- * @author Semih Sarkoca (220104004038), Ahmet Furkan Arslan (220104004044), Halil Buğra Şen (230104004088)
+ * @author Emre Can Tuncer (200104004115), Semih Sarkoca (220104004038), Ahmet Furkan Arslan (220104004044), Halil Buğra Şen (230104004088)
  * @date 2025-03-01
  * @version 0.1
  *
@@ -26,7 +26,7 @@
 #define M6_W_VISION              0.5f   /**< Fusion weight: YOLO confidence */
 #define M6_W_SMOKE               0.3f   /**< Fusion weight: smoke sensor */
 #define M6_W_IR                  0.2f   /**< Fusion weight: IR temperature */
-#define M6_BATTERY_LOW_V         9.6f   /**< Battery voltage for low-battery warning */
+#define M6_BATTERY_LOW_V         7.2f   /**< Battery voltage for low-battery warning */
 
 /* ── Data Types ─────────────────────────────────────────────────────────── */
 

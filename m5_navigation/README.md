@@ -13,7 +13,7 @@ One-sentence purpose: Implements wall-following exploration, occupancy grid mapp
 | Dependency | Type | Notes |
 |---|---|---|
 | M2 `m2_motor_drive()` API | Module | Navigation calls motor API |
-| M3 `m3_get_navigation_sensors()` API | Module | Wall-following needs ultrasonic + IMU |
+| M3 `m3_get_navigation_sensors()` API | Module | Wall-following needs ultrasonic sensors |
 | M7 `m7_save_map()` / `m7_load_map()` API | Module | Map persistence at startup and end of explore |
 | numpy ≥ 1.24.0 | Python package | Occupancy grid, vector math |
 | `json`, `math`, `time`, `threading` | stdlib | Map serialisation, nav loops |
@@ -77,7 +77,7 @@ int main(void) {
 
 ## Known Limitations & TODOs
 
-- Dead-reckoning position estimation drifts over long runs; IMU-based odometry correction is planned for v0.2.
+- Dead-reckoning position estimation drifts over long runs; alternative odometry correction is required.
 - Patrol waypoints are generated automatically from the explored grid; manual waypoint injection is not yet supported.
 - Recovery behaviour when `is_stuck == true` is a simple reverse-and-turn; more sophisticated recovery is a future TODO.
 
