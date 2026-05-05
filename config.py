@@ -20,6 +20,7 @@ MOTOR_ENA, MOTOR_ENB = 12, 13
 # Sensor Integration (M3)
 TRIG_LEFT, ECHO_LEFT = 23, 24
 TRIG_RIGHT, ECHO_RIGHT = 25, 8
+TRIG_CENTER, ECHO_CENTER = 16, 20 # 3rd Ultrasonic Sensor Added
 MQ2_CS_PIN = 5
 MQ2_ADC_CH = 0
 
@@ -44,6 +45,15 @@ FUSION_CLEAR_THRESH = 0.4
 OBSTACLE_DIST_CM = 20
 GRID_RESOLUTION_M = 0.10
 WALL_FOLLOW_DIST_CM = 30
+
+# --- Battery Characteristics (2S Li-ion) ---
+BATTERY_MAX_V     = 8.4   # Full charge
+BATTERY_NOMINAL_V = 7.4   # Typical
+BATTERY_LOW_V     = 6.8   # Warning threshold
+BATTERY_CRIT_V    = 6.4   # Emergency stop / cutoff
+BATTERY_ADC_CH    = 1     # Which MCP3208 channel
+VDIV_R1           = 20000.0 # 20k Ohm
+VDIV_R2           = 10000.0 # 10k Ohm (V_ADC = V_BAT * R2/(R1+R2))
 
 # --- Fusion Weights (must sum to 1.0) ---
 

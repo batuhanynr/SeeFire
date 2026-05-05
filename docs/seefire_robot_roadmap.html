@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SeeFire Robot — Yapım Roadmap'i</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f9f8f4;color:#2c2c2a;padding:24px;max-width:760px;margin:0 auto}
+.rm-wrap{padding:8px 0 24px}
+.rm-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.rm-title{font-size:16px;font-weight:600;color:#2c2c2a}
+.rm-sub{font-size:12px;color:#73726c;margin-top:2px}
+.progress-bar{height:4px;background:#e2e0d8;border-radius:2px;margin-bottom:20px;overflow:hidden}
+.progress-fill{height:100%;background:#1D9E75;border-radius:2px;transition:width .4s}
+.phases{display:flex;flex-direction:column;gap:8px}
+.phase-card{border:0.5px solid #d3d1c7;border-radius:12px;overflow:hidden;transition:border-color .2s;background:#fff}
+.phase-card.active{border-color:#b4b2a9}
+.phase-head{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;background:#fff}
+.phase-head:hover{background:#f5f4ef}
+.phase-num{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}
+.phase-meta{flex:1;min-width:0}
+.phase-name{font-size:13px;font-weight:600;color:#2c2c2a}
+.phase-dur{font-size:11px;color:#73726c;margin-top:1px}
+.phase-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.tag{font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600}
+.phase-toggle{font-size:18px;color:#888780;transition:transform .25s;flex-shrink:0;line-height:1}
+.phase-body{display:none;padding:0 14px 14px;border-top:0.5px solid #e2e0d8}
+.phase-body.open{display:block}
+.tasks-title{font-size:10px;font-weight:600;color:#888780;margin:12px 0 8px;text-transform:uppercase;letter-spacing:.06em}
+.task{display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:0.5px solid #ede9e1}
+.task:last-child{border-bottom:none}
+.task-cb{width:16px;height:16px;border-radius:4px;border:0.5px solid #b4b2a9;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-top:2px;transition:background .15s;font-size:10px;color:#1D9E75;font-weight:700}
+.task-cb.done{background:#eaf3de;border-color:#97c459}
+.task-text{font-size:13px;color:#2c2c2a;line-height:1.55;flex:1}
+.task-text.done{color:#888780;text-decoration:line-through}
+.tip-box{margin-top:12px;padding:10px 12px;background:#e6f1fb;border-radius:8px;border-left:3px solid #85b7eb}
+.tip-box p{font-size:12px;color:#185FA5;line-height:1.65}
+.tip-box strong{font-weight:600}
+.mod-chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:10px}
+.mod-chip{font-size:10px;padding:2px 8px;background:#f1efe8;border:0.5px solid #d3d1c7;border-radius:20px;color:#5f5e5a}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+.stat-card{background:#f1efe8;border-radius:8px;padding:10px 12px;text-align:center}
+.stat-val{font-size:22px;font-weight:600;color:#2c2c2a}
+.stat-lbl{font-size:11px;color:#73726c;margin-top:2px}
+</style>
+</head>
+<body>
+<div class="rm-wrap">
+<div class="rm-header">
+  <div>
+    <div class="rm-title">SeeFire Robot — Yapım Roadmap'i</div>
+    <div class="rm-sub">Tahmini süre: 3–4 hafta | 7 faz</div>
+  </div>
+</div>
+<div class="stats">
+  <div class="stat-card"><div class="stat-val" id="s-done">0</div><div class="stat-lbl">Tamamlanan görev</div></div>
+  <div class="stat-card"><div class="stat-val" id="s-total">0</div><div class="stat-lbl">Toplam görev</div></div>
+  <div class="stat-card"><div class="stat-val" id="s-pct">0%</div><div class="stat-lbl">İlerleme</div></div>
+</div>
+<div class="progress-bar"><div class="progress-fill" id="prog" style="width:0%"></div></div>
+<div class="phases" id="phases"></div>
+</div>
+<script>
+const phases=[
+{
+  name:"Fiziksel Montaj & Güç Kurulumu",
+  dur:"Tahmini: 1–2 gün",
+  mods:["M1 — Şasi & Mekanik","M2 — Motor & Güç"],
+  color:"#7F77DD",bg:"#EEEDFE",tcolor:"#3C3489",
+  tag:"Donanım",tagbg:"#EEEDFE",tagc:"#3C3489",
+  tasks:[
+    "4WD şasi kitini monte et (şase plakalarını, motorları ve tekerlekleri tak)",
+    "4 adet TT motoru L298N motor sürücüsüne bağla (sol 2 paralel, sağ 2 paralel)",
+    "2S 18650 Li-ion 7.4V bataryayı XT60 konnektörle devreye al",
+    "LM2596 step-down modülünü 5V'a ayarla ve Pi'yi besle (multimetreyle ölç!)",
+    "Raspberry Pi 4B'yi şasiye vida veya bant ile sabitle",
+    "GPIO, GND ve 5V hatlarını breadboard üzerinden dağıt",
+    "Bütün kablo bağlantılarını zipte veya bant ile düzenle"
+  ],
+  tip:"<strong>İlk kural:</strong> Raspberry Pi'yi bağlamadan önce LM2596 çıkışının kesinlikle 5V olduğunu multimetreyle doğrula. Yanlış voltaj Pi'yi yakabilir. LiPo'yu doğrudan Pi'ye bağlama!"
+},
+{
+  name:"Raspberry Pi Kurulumu & Yazılım Ortamı",
+  dur:"Tahmini: yarım–1 gün",
+  mods:["M2","M3","M4"],
+  color:"#1D9E75",bg:"#E1F5EE",tcolor:"#085041",
+  tag:"Yazılım",tagbg:"#E1F5EE",tagc:"#085041",
+  tasks:[
+    "Raspberry Pi OS 64-bit'i microSD'ye yaz (Raspberry Pi Imager ile)",
+    "SSH'ı aktif et, WiFi'ı yapılandır (headless kurulum)",
+    "sudo apt update && apt upgrade komutlarını çalıştır",
+    "Python 3.11+ ve pip'i kontrol et, gerekli paketleri kur",
+    "RPi.GPIO veya gpiozero kütüphanesini kur ve test et",
+    "OpenCV'yi kur: pip install opencv-python-headless",
+    "GitHub reposunu oluştur, Pi'ye klonla — herkesi collaborator yap",
+    "config.py dosyasını oluştur: tüm GPIO pin numaraları buraya"
+  ],
+  tip:"<strong>Zaman kazandıran ipucu:</strong> Herkese aynı config.py'yi paylaşın. GPIO numaraları (MOTOR_IN1=17 vb.) bir kez tanımlanınca modüller arası çakışma olmaz. SSH ile Pi'ye laptop'tan bağlanmak için aynı WiFi ağında olun."
+},
+{
+  name:"Motor Kontrolü — M2 Modülü",
+  dur:"Tahmini: 1–2 gün",
+  mods:["M2 — Motor Control & Power"],
+  color:"#BA7517",bg:"#FAEEDA",tcolor:"#633806",
+  tag:"M2",tagbg:"#FAEEDA",tagc:"#633806",
+  tasks:[
+    "L298N IN1-IN4 pinlerini GPIO'ya bağla (bağlantı şemasına göre)",
+    "ENA ve ENB pinlerine PWM çıkışı yaz (1 kHz frekans)",
+    "ileri(), geri(), sola_don(), saga_don(), dur() fonksiyonlarını yaz",
+    "Motoru farklı PWM duty cycle'larıyla test et (30%, 60%, 100%)",
+    "MCP3208 SPI bağlantısını kur ve Li-ion voltaj ölçümünü dene",
+    "Voltaj bölücüyü breadboard'da kur: R1=20kΩ, R2=10kΩ",
+    "LED (GPIO 26) ve Buzzer (GPIO 19) test et: m2_set_alarm()",
+    "m2_motor_turn(angle) için zamanlama kalibrasyonu yap (90° = kaç ms?)"
+  ],
+  tip:"<strong>Test sırası:</strong> Önce motorsuz GPIO komutlarını test et (multimetre ile pin voltajları), sonra motorları tak. Robot masada yüksekte dururken wheel spin testi yap — zemine koymadan hareketi doğrula."
+},
+{
+  name:"Sensör Entegrasyonu — M3 Modülü",
+  dur:"Tahmini: 1–2 gün",
+  mods:["M3 — Sensor Integration"],
+  color:"#D85A30",bg:"#FAECE7",tcolor:"#4A1B0C",
+  tag:"M3",tagbg:"#FAECE7",tagc:"#4A1B0C",
+  tasks:[
+    "3x HC-SR04 ultrasonik sensörü GPIO'ya bağla (Ön, Sağ, Sol, TRIG/ECHO + 5V→3.3V bölücü)",
+    "HC-SR04 okuma fonksiyonunu yaz ve mesafeyi test et (üç sensörden veri al)",
+    "MLX90614 IR sensörü I2C'ye bağla (SDA=GPIO2, SCL=GPIO3, 3.3V)",
+    "i2cdetect -y 1 ile 0x5A adresini doğrula",
+    "MQ-2 gaz sensörünü MCP3208 CH0'a bağla, SPI'ı aktif et",
+    "MQ-2'nin 60 sn ısınma süresini bekle, kalibrasyon oku",
+    "m3_get_fusion_sensors() fonksiyonunu yaz (smoke_level, ir_temp, timestamp)",
+    "m3_get_ultrasonic_distances() fonksiyonunu yaz ve engel tespitini dene"
+  ],
+  tip:"<strong>Dikkat:</strong> HC-SR04 Echo pini 5V çıkış verir — Pi'nin 3.3V GPIO'su için voltaj bölücü şart (1kΩ + 2kΩ). Aksi halde GPIO pini zarar görür. MLX90614 bağlantı kablolarını kısa tut, uzun jumper I2C'yi bozabilir."
+},
+{
+  name:"AI & Görü — M4 Modülü (YOLOv8n)",
+  dur:"Tahmini: 2–3 gün",
+  mods:["M4 — AI & Vision"],
+  color:"#534AB7",bg:"#EEEDFE",tcolor:"#26215C",
+  tag:"M4 · AI",tagbg:"#EEEDFE",tagc:"#534AB7",
+  tasks:[
+    "Logitech C270 USB kamerayı Pi'ye tak, lsusb ile algılandığını doğrula",
+    "pip install ultralytics ile YOLOv8 kur (internet bağlantısı gerekli)",
+    "YOLOv8n modelini indir: yolov8n.pt (fire/smoke için Roboflow dataset'i bul)",
+    "Modeli INT8 quantize et — Pi 4'te inference hızı için kritik",
+    "OpenCV ile 320×320 frame yakala ve YOLOv8'e ver",
+    "m4_start_pipeline() arka plan thread'ini yaz (capture→infer→postprocess)",
+    "m4_vision_result_t struct'ına sonucu yaz (class_id, confidence, bbox)",
+    "Pi 4'te FPS'i ölç: hedef 5 FPS (200ms per frame). Gerekirse optimize et"
+  ],
+  tip:"<strong>Pi 4'te hız:</strong> YOLOv8n INT8 ile 320×320 çözünürlükte ~150ms inference mümkün. Daha büyük model veya çözünürlük deneme — Pi donabilir. Kamerayı önce basit OpenCV scripti ile test et, YOLO sonra."
+},
+{
+  name:"Navigasyon & Engelden Kaçınma — M5 Modülü",
+  dur:"Tahmini: 2–3 gün",
+  mods:["M5 — Navigation & Mapping"],
+  color:"#0F6E56",bg:"#E1F5EE",tcolor:"#04342C",
+  tag:"M5",tagbg:"#E1F5EE",tagc:"#04342C",
+  tasks:[
+    "M3'ten ultrasonik mesafe verilerini oku ve eşik değerlerini belirle (<20cm = engel)",
+    "Basit engelden kaçınma mantığı: ön engel → sağa/sola bak → dön",
+    "Wall-following algoritması: sağ sensörle duvar mesafesini koru",
+    "Dead reckoning ile konum tahmini (ileri × hız × süre = mesafe)",
+    "Basit occupancy grid oluştur (2D liste, 1=engel, 0=boş, -1=bilinmiyor)",
+    "m5_navigate_to() ve m5_update_map() fonksiyonlarını yaz",
+    "Robotun bir odada dönüp engelleri haritalamasını test et",
+    "Keşif stratejisi: bilinmeyen alanlara yönel (frontier-based basit versiyon)"
+  ],
+  tip:"<strong>İlk hedef basit tutun:</strong> Harita mükemmel olmak zorunda değil. Önce güvenli engelden kaçınmayı sağlayın — robot duvara çarpmıyorsa navigasyon çalışıyor demektir. Dead reckoning birikimli hata yapar, beklenen bu."
+},
+{
+  name:"Karar Motoru (FSM) — M6 & Loglama — M7",
+  dur:"Tahmini: 2–3 gün",
+  mods:["M6 — Decision Engine","M7 — Data Logging"],
+  color:"#185FA5",bg:"#E6F1FB",tcolor:"#042C53",
+  tag:"M6 · M7",tagbg:"#E6F1FB",tagc:"#042C53",
+  tasks:[
+    "FSM state enum'u oluştur: INIT, EXPLORE, PATROL, VERIFY, ALARM",
+    "INIT → EXPLORE: sensörler hazır olunca geçiş",
+    "EXPLORE → PATROL: smoke_alert veya yüksek ir_temp algılandığında",
+    "PATROL → VERIFY: YOLO confidence > 0.5 olduğunda (robot durur, M4 frame alır)",
+    "VERIFY → ALARM: confidence > 0.7 veya fusion skoru yüksekse — LED + buzzer",
+    "SQLite veritabanı oluştur: m7_log_event() fonksiyonu ile her olayı kaydet",
+    "JPEG snapshot'ı kaydet: ALARM state'inde kamera karesi disk'e yaz",
+    "Ana döngüyü çalıştır: tüm modülleri birbirine bağla ve gerçek test yap"
+  ],
+  tip:"<strong>Entegrasyon sırası:</strong> Önce sadece M6 FSM'i print() ile test edin (gerçek sensör olmadan mock data). Sonra M3'ü bağlayın, sonra M4'ü. Her adımda tek bir modül ekleyerek hata yerini kolayca bulabilirsiniz."
+},
+{
+  name:"Entegrasyon Testi & Kalibrasyon",
+  dur:"Tahmini: 3–5 gün (süregelen)",
+  mods:["Tüm Modüller","Test & Demo"],
+  color:"#3d3d3a",bg:"#F1EFE8",tcolor:"#2C2C2A",
+  tag:"Final",tagbg:"#F1EFE8",tagc:"#444441",
+  tasks:[
+    "Sistemi uçtan uca test et: robotu odaya koy ve çalıştır",
+    "MQ-2 ve MLX90614 eşik değerlerini gerçek ateş/duman ile kalibre et (DİKKATLİ!)",
+    "YOLO confidence threshold'unu ayarla: yanlış alarm vs kaçırma dengesi",
+    "Batarya voltaj eşiklerini 2S 18650 pakete göre güncelle (LOW=6.8V, CRIT=6.4V)",
+    "Motor hız dengesini ayarla: sol ve sağ motorlar aynı hızda mı gidiyor?",
+    "Parkur testi: robotun odada engelleri aşarak yangın kaynağına ulaşmasını doğrula",
+    "Log dosyalarını kontrol et: olaylar doğru kaydediliyor mu?",
+    "Demo senaryosu hazırla ve kuru çalışma yap"
+  ],
+  tip:"<strong>Stres testi önemli:</strong> Robotu tek başına 10 dakika çalıştırın. Batarya bitmeden duruyor mu? Aynı mekânda birkaç kez güvenilir şekilde yangın buluyor mu? Tek seferlik çalışma yetmez — tutarlılığı test edin."
+}
+];
+
+let checks={};
+function render(){
+  const el=document.getElementById('phases');
+  el.innerHTML='';
+  let total=0,done=0;
+  phases.forEach((p,pi)=>{
+    total+=p.tasks.length;
+    p.tasks.forEach((_,ti)=>{if(checks[pi+'-'+ti])done++;});
+    const card=document.createElement('div');
+    card.className='phase-card';
+    card.innerHTML=`
+<div class="phase-head" onclick="toggle(${pi})">
+  <div class="phase-num" style="background:${p.bg};color:${p.tcolor}">${pi+1}</div>
+  <div class="phase-meta">
+    <div class="phase-name">${p.name}</div>
+    <div class="phase-dur">${p.dur}</div>
+    <div class="phase-tags">
+      <span class="tag" style="background:${p.tagbg};color:${p.tagc}">${p.tag}</span>
+    </div>
+  </div>
+  <div class="phase-toggle" id="tog-${pi}">›</div>
+</div>
+<div class="phase-body" id="body-${pi}">
+  <div class="tasks-title">Görevler</div>
+  ${p.tasks.map((t,ti)=>`
+  <div class="task">
+    <div class="task-cb ${checks[pi+'-'+ti]?'done':''}" onclick="chk(${pi},${ti})">${checks[pi+'-'+ti]?'✓':''}</div>
+    <div class="task-text ${checks[pi+'-'+ti]?'done':''}">${t}</div>
+  </div>`).join('')}
+  <div class="tip-box"><p>${p.tip}</p></div>
+  <div class="mod-chips">${p.mods.map(m=>`<span class="mod-chip">${m}</span>`).join('')}</div>
+</div>`;
+    el.appendChild(card);
+  });
+  document.getElementById('s-done').textContent=done;
+  document.getElementById('s-total').textContent=total;
+  document.getElementById('s-pct').textContent=Math.round(done/total*100)+'%';
+  document.getElementById('prog').style.width=(done/total*100)+'%';
+}
+function toggle(pi){
+  const body=document.getElementById('body-'+pi);
+  const tog=document.getElementById('tog-'+pi);
+  const open=body.classList.toggle('open');
+  tog.style.transform=open?'rotate(90deg)':'none';
+  document.querySelectorAll('.phase-card')[pi].classList.toggle('active',open);
+}
+function chk(pi,ti){
+  const key=pi+'-'+ti;
+  checks[key]=!checks[key];
+  const wasOpen=document.getElementById('body-'+pi).classList.contains('open');
+  render();
+  if(wasOpen){
+    document.getElementById('body-'+pi).classList.add('open');
+    document.getElementById('tog-'+pi).style.transform='rotate(90deg)';
+    document.querySelectorAll('.phase-card')[pi].classList.add('active');
+  }
+}
+render();
+</script>
+</body>
+</html>
