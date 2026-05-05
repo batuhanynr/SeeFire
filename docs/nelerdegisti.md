@@ -1,42 +1,84 @@
-# SeeFire Projesi - Plan ve Gerçekleşen Arasındaki Değişiklikler (Deviations from Original Report)
+# SeeFire — Original Report vs Current Code
 
-Bu belge, `SeeFire_Module_Documentation_Report.md` (ve ilgili PDF) dokümanında planlanan ilk tasarım ile mevcut **main** dalındaki güncel kod mimarisi ve donanım bileşenleri arasındaki farklılıkları listelemek için oluşturulmuştur. 
+This note tracks the main deviations from `SeeFire_Module_Documentation_Report.md`.
 
-Yeni bir rapor yazılacağı zaman veya başka bir AI asistanı mevcut durumu analiz edeceği zaman **bu belgedeki bilgiler güncel doğru (source of truth)** olarak kabul edilmelidir.
+Use this file together with `CLAUDE.md` when older documents disagree with the current repository.
 
----
+## 1. Core Project Direction
 
-## 1. Donanım ve Sensör Değişiklikleri (Hardware & Sensors)
+The project is still the same SeeFire robot described in the Assignment 3 report:
+- Raspberry Pi based
+- modular structure (`M1`–`M7`)
+- offline operation
+- fire-detection goal
 
-| Bileşen | Orijinal Plan (Rapordaki) | Güncel Durum (Kodlanan) | Değişiklik Nedeni / Avantajı |
-| :--- | :--- | :--- | :--- |
-| **Ultrasonik Sensör** | 2 adet (Ön ve Sağ) | **3 adet** (Sol, Orta, Sağ) | Sadece duvar takibi yapmak yerine, robotun çevresindeki engelleri daha geniş bir açıyla (ön, sağ, sol) algılayıp sıkışmasını engellemek. |
-| **ADC Entegresi** | MCP3008 (10-bit) | **MCP3208 (12-bit)** | M3 modülünde (MQ-2 ve Batarya) daha yüksek hassasiyet. Okuma değerleri 1023 üzerinden değil, 4095 üzerinden yapılıyor. |
-| **Batarya & Voltaj** | LiPo 2S (Sadece Vcc beslemesi) | **2S (Li-ion/LiPo)** ve aktif voltaj izleme | Batarya sağlığını korumak için 20k/10k voltaj bölücü kullanıldı (max 8.4V). Kritik sınır (6.4V) altına düşünce M6 karar motoru "CRITICAL_STOP" durumuna geçiyor. |
+The largest changes are in navigation and implementation maturity.
 
----
+## 2. Navigation Changes
 
-## 2. Navigasyon ve Karar Mantığı (M5 & M6)
+### Original report
 
-### 2.1. Keşif Stratejisi (Navigation Strategy)
-*   **Eski Plan:** Sadece "Right-hand wall-following" (sağ duvarı takip ederek rastgele odada dolanma).
-*   **Yeni Plan:** Alperen'in geliştirmeleri sonrası **"Sector-Based Traverse" (Sektör ve Rota Bazlı İlerleme)** mantığına geçildi.
-*   **Nasıl Çalışır:** Robot belirli hedeflere (waypoints) sahip (`config.WAYPOINTS`). Robot bir sektörün içinde hareket ederken belirlenen **orta noktalarda (midpoint) kesinlikle durup fotoğraf çekiyor**. Engellerden (`ObstacleAvoidance`) kaçınsa bile bu orta noktaya geri dönmeye çalışıyor.
+- unknown-environment exploration
+- wall-following
+- occupancy-grid creation
+- explore/patrol transition
 
-### 2.2. Sensör Filtreleme
-*   Orijinal planda tekil okuma varken, güncel koda gürültü ve hatalı yankıları engellemek için **Medyan Filtreleme** eklendi. `get_navigation_sensors_filtered(samples=3)` fonksiyonu arka arkaya 3 ölçüm alıp ortadaki değeri kabul ederek çok daha stabil bir mesafe ölçümü sağlar.
+### Current code
 
----
+- the map is **pre-drawn**
+- the route is **static**
+- movement is **south-to-north sector traversal**
+- start placement is validated with left/right HC-SR04 before motion
+- waypoint and midpoint snapshot hooks exist in M5
+- there is no live exploration phase in M5
 
-## 3. Yazılım Mimarisi ve Geliştirme Ortamı
+## 3. Hardware / I/O Changes
 
-### 3.1. Mock Mode Mimarisi
-*   Raporda sadece Raspberry Pi üzerinde çalışacak bir koddandan bahsediliyor. Ancak geliştirme sürecini hızlandırmak (ve farklı işletim sistemlerinde kod yazabilmek) için projeye çok kapsamlı bir **MOCK_MODE** eklendi.
-*   `RPi.GPIO`, `smbus2`, `spidev` gibi Raspberry Pi'ye özgü kütüphaneler ortamda bulunmuyorsa, sistem çökmez. Bunların yerine rastgele sensör değerleri üreten simülasyon fonksiyonları devreye girer. Tüm modüller (M2, M3, vb.) bilgisayar üzerinde hiçbir donanım bağlı olmadan test edilebilir.
+| Topic | Original report | Current code |
+|---|---|---|
+| Ultrasonic layout | 2 sensors | 3 sensors: `left`, `front`, `right` |
+| ADC wording | MCP3008 in parts of the docs | Current Python code uses MCP3208-style 12-bit conversion |
+| Navigation I/O | Some drafts implied alternate controller setups | Current implementation targets Raspberry Pi GPIO directly |
+| Arduino | Mentioned in some side documents | **Not used** |
 
----
+## 4. Software Maturity Changes
 
-## Özet Olarak Sonraki Rapor İçin Notlar
-1.  **Sistem mimarisi (M1'den M7'ye kadar modüller)** konsept olarak aynı kaldı. Ancak yazılımın çalışma şekli çok daha defansif, çevreyi daha iyi algılayan (3 sensör) ve planlı hareket eden (Waypoint/Sektör algosu) bir hale geldi.
-2.  M2 kısmına bataryayı anlık ölçüp sistemi kurtarma yeteneği eklendi.
-3.  Kod, ilk rapordaki gibi doğrudan sensöre körü körüne güvenmek yerine verileri medyana alarak filtreleyip FSM'e besleyecek kadar olgunlaştı.
+| Module | Current reality |
+|---|---|
+| M2 | Implemented with mock mode, battery read, encoder-backed distance API |
+| M3 | Implemented with fusion data and median-filtered nav reads |
+| M4 | Only camera/frame and turn-direction hint are live; fire inference pipeline is still pending |
+| M5 | Static-route navigation is implemented |
+| M6 | Still placeholder; no live FSM loop yet |
+| M7 | Implemented |
+
+This means some old documents still describe a fully wired `INIT -> EXPLORE -> PATROL -> VERIFY -> ALARM` runtime, but the repository has not reached that stage yet.
+
+## 5. Mock Mode and Development Environment
+
+The repository now supports normal development machines much better than the original report assumed.
+
+- Missing `RPi.GPIO` triggers mock behavior in M2/M3
+- Missing OpenCV/Numpy keeps M4 importable with degraded behavior
+- Persistent files default to repo-local `runtime_data/` unless `SEEFIRE_DATA_DIR` is set
+
+This is intentional so the team can develop without the physical robot connected.
+
+## 6. Source-of-Truth Rule
+
+When there is a conflict:
+
+1. Python implementation
+2. `config.py`
+3. `CLAUDE.md`
+4. this file
+5. older reports and headers
+
+## 7. Important Clarification for Future Report Writing
+
+If a future report is produced, it should say:
+- the navigation map is static and prepared beforehand
+- the robot verifies left/right wall references at startup
+- Raspberry Pi handles the hardware directly
+- Arduino is not part of the current architecture
+- M6 FSM is planned but not yet implemented in the repository

@@ -42,9 +42,14 @@ class FusionData:
 @dataclass
 class NavData:
     left_cm: float
-    center_cm: float
+    front_cm: float
     right_cm: float
     timestamp: float
+
+    @property
+    def center_cm(self) -> float:
+        """Backward-compatible alias for older docs/tests."""
+        return self.front_cm
 
 class SensorsM3:
     def __init__(self):
@@ -65,10 +70,10 @@ class SensorsM3:
         GPIO.setwarnings(False)
         
         # Setup Ultrasonics
-        for pin in (config.TRIG_LEFT, config.TRIG_RIGHT, config.TRIG_CENTER):
+        for pin in (config.TRIG_LEFT, config.TRIG_RIGHT, config.TRIG_FRONT):
             GPIO.setup(pin, GPIO.OUT)
             GPIO.output(pin, GPIO.LOW)
-        for pin in (config.ECHO_LEFT, config.ECHO_RIGHT, config.ECHO_CENTER):
+        for pin in (config.ECHO_LEFT, config.ECHO_RIGHT, config.ECHO_FRONT):
             GPIO.setup(pin, GPIO.IN)
 
         # Setup I2C (MLX90614)
@@ -151,21 +156,21 @@ class SensorsM3:
 
     def get_navigation_sensors(self) -> NavData:
         l = self._read_ultrasonic(config.TRIG_LEFT, config.ECHO_LEFT)
-        c = self._read_ultrasonic(config.TRIG_CENTER, config.ECHO_CENTER)
+        c = self._read_ultrasonic(config.TRIG_FRONT, config.ECHO_FRONT)
         r = self._read_ultrasonic(config.TRIG_RIGHT, config.ECHO_RIGHT)
-        return NavData(left_cm=l, center_cm=c, right_cm=r, timestamp=time.time())
+        return NavData(left_cm=l, front_cm=c, right_cm=r, timestamp=time.time())
 
     def get_navigation_sensors_filtered(self, samples: int = 3) -> NavData:
         """Median-filtered nav reading. Robust against single-shot noise/reflections."""
-        lefts, rights, centers = [], [], []
+        lefts, rights, fronts = [], [], []
         for _ in range(samples):
             lefts.append(self._read_ultrasonic(config.TRIG_LEFT, config.ECHO_LEFT))
             rights.append(self._read_ultrasonic(config.TRIG_RIGHT, config.ECHO_RIGHT))
-            centers.append(self._read_ultrasonic(config.TRIG_CENTER, config.ECHO_CENTER))
+            fronts.append(self._read_ultrasonic(config.TRIG_FRONT, config.ECHO_FRONT))
             time.sleep(0.02)
         return NavData(
             left_cm=median(lefts),
-            center_cm=median(centers),
+            front_cm=median(fronts),
             right_cm=median(rights),
             timestamp=time.time(),
         )

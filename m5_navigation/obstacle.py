@@ -49,7 +49,7 @@ class ObstacleAvoidance:
             m2_motor.turn_left_90()
             return_first_turn = m2_motor.turn_right_90
 
-        side_distance_cm = self._side_pass(sector_id)
+        side_distance_cm = self._side_pass(sector_id, direction)
 
         # Return to original heading and route line, encoder only.
         return_first_turn()                          # face north
@@ -75,13 +75,14 @@ class ObstacleAvoidance:
         reading = m3_sensors.get_navigation_sensors_filtered()
         return "RIGHT" if reading.right_cm > reading.left_cm else "LEFT"
 
-    def _side_pass(self, sector_id: int) -> float:
-        """Step forward until the left sensor reports the obstacle has ended.
+    def _side_pass(self, sector_id: int, direction: str) -> float:
+        """Step forward until the obstacle-facing side sensor reports clear.
         Returns total cm traveled sideways (encoder integral)."""
+        sensor_attr = "left_cm" if direction == "RIGHT" else "right_cm"
         traveled = 0.0
         while True:
             reading = m3_sensors.get_navigation_sensors_filtered(samples=2)
-            if reading.left_cm > config.OBSTACLE_CLEAR_CM:
+            if getattr(reading, sensor_attr) > config.OBSTACLE_CLEAR_CM:
                 logger.info("[OBSTACLE] Cleared after %.1f cm side-pass.", traveled)
                 return traveled
 

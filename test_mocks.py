@@ -15,7 +15,10 @@ motor.init_hardware()
 
 print("\n--- 2. Testing M3 (Sensors) ---")
 nav_data = sensors.get_navigation_sensors()
-print(f"Navigation Data: Left={nav_data.left_cm:.2f}cm, Right={nav_data.right_cm:.2f}cm")
+print(
+    f"Navigation Data: Left={nav_data.left_cm:.2f}cm, "
+    f"Front={nav_data.front_cm:.2f}cm, Right={nav_data.right_cm:.2f}cm"
+)
 
 fusion_data = sensors.get_fusion_sensors()
 print(f"Fusion Data: Smoke Level={fusion_data.smoke_level}, IR Temp={fusion_data.ir_temp}C, Alert={fusion_data.smoke_alert}")

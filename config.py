@@ -3,8 +3,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Base data directory — all persistent files go here
-DATA_DIR = os.environ.get("SEEFIRE_DATA_DIR", "/data")
+# Base data directory — all persistent files go here.
+# Defaults to a repo-local directory so mock-mode works on dev machines
+# without requiring a writable /data mount.
+_DEFAULT_DATA_DIR = os.path.join(os.path.dirname(__file__), "runtime_data")
+DATA_DIR = os.environ.get("SEEFIRE_DATA_DIR", _DEFAULT_DATA_DIR)
 
 # File paths
 MAP_JSON_PATH = os.path.join(DATA_DIR, "map.json")

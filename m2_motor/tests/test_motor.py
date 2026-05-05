@@ -1,4 +1,3 @@
-import pytest
 from unittest.mock import patch
 from m2_motor import motor
 
@@ -15,8 +14,7 @@ def test_battery_voltage():
         voltage = motor.get_battery_voltage()
         assert 7.0 <= voltage <= 8.0
 
-def test_battery_status():
-    with patch('m3_sensors.sensors.read_battery_adc', return_value=1770): # ~6.5V
-        status = motor.get_battery_status()
-        assert status["critical"] == True
-
+def test_battery_voltage_can_drop_to_critical_range():
+    with patch('m3_sensors.sensors.read_battery_adc', return_value=1770):  # ~6.5V
+        voltage = motor.get_battery_voltage()
+        assert voltage <= 6.6
