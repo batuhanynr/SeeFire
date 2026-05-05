@@ -5,6 +5,7 @@ Uses SPI (MCP3208) for MQ-2, I2C for MLX90614, and GPIO for HC-SR04.
 Supports Mock Mode for development without physical sensors.
 """
 from dataclasses import dataclass
+from statistics import median
 import time
 import logging
 
@@ -42,6 +43,7 @@ class FusionData:
 class NavData:
     left_cm: float
     right_cm: float
+    front_cm: float
     timestamp: float
 
 class SensorsM3:
@@ -62,11 +64,11 @@ class SensorsM3:
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
         
-        # Setup Ultrasonics
-        for pin in (config.TRIG_LEFT, config.TRIG_RIGHT):
+        # Setup Ultrasonics (left, right, front)
+        for pin in (config.TRIG_LEFT, config.TRIG_RIGHT, config.TRIG_FRONT):
             GPIO.setup(pin, GPIO.OUT)
             GPIO.output(pin, GPIO.LOW)
-        for pin in (config.ECHO_LEFT, config.ECHO_RIGHT):
+        for pin in (config.ECHO_LEFT, config.ECHO_RIGHT, config.ECHO_FRONT):
             GPIO.setup(pin, GPIO.IN)
 
         # Setup I2C (MLX90614)
@@ -150,7 +152,23 @@ class SensorsM3:
     def get_navigation_sensors(self) -> NavData:
         l = self._read_ultrasonic(config.TRIG_LEFT, config.ECHO_LEFT)
         r = self._read_ultrasonic(config.TRIG_RIGHT, config.ECHO_RIGHT)
-        return NavData(left_cm=l, right_cm=r, timestamp=time.time())
+        f = self._read_ultrasonic(config.TRIG_FRONT, config.ECHO_FRONT)
+        return NavData(left_cm=l, right_cm=r, front_cm=f, timestamp=time.time())
+
+    def get_navigation_sensors_filtered(self, samples: int = 3) -> NavData:
+        """Median-filtered nav reading. Robust against single-shot noise/reflections."""
+        lefts, rights, fronts = [], [], []
+        for _ in range(samples):
+            lefts.append(self._read_ultrasonic(config.TRIG_LEFT, config.ECHO_LEFT))
+            rights.append(self._read_ultrasonic(config.TRIG_RIGHT, config.ECHO_RIGHT))
+            fronts.append(self._read_ultrasonic(config.TRIG_FRONT, config.ECHO_FRONT))
+            time.sleep(0.02)
+        return NavData(
+            left_cm=median(lefts),
+            right_cm=median(rights),
+            front_cm=median(fronts),
+            timestamp=time.time(),
+        )
 
     def read_battery_adc(self) -> int:
         """Expose Battery ADC channel for M2"""
@@ -167,5 +185,6 @@ _instance = SensorsM3()
 init_sensors = _instance.init_sensors
 get_fusion_sensors = _instance.get_fusion_sensors
 get_navigation_sensors = _instance.get_navigation_sensors
+get_navigation_sensors_filtered = _instance.get_navigation_sensors_filtered
 read_battery_adc = _instance.read_battery_adc
 cleanup = _instance.cleanup
