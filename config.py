@@ -20,6 +20,7 @@ MOTOR_ENA, MOTOR_ENB = 12, 13
 # Sensor Integration (M3)
 TRIG_LEFT, ECHO_LEFT = 23, 24
 TRIG_RIGHT, ECHO_RIGHT = 25, 8
+TRIG_CENTER, ECHO_CENTER = 16, 20 # 3rd Ultrasonic Sensor Added
 MQ2_CS_PIN = 5
 MQ2_ADC_CH = 0
 
