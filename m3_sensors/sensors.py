@@ -41,6 +41,7 @@ class FusionData:
 @dataclass
 class NavData:
     left_cm: float
+    center_cm: float
     right_cm: float
     timestamp: float
 
@@ -63,10 +64,10 @@ class SensorsM3:
         GPIO.setwarnings(False)
         
         # Setup Ultrasonics
-        for pin in (config.TRIG_LEFT, config.TRIG_RIGHT):
+        for pin in (config.TRIG_LEFT, config.TRIG_RIGHT, config.TRIG_CENTER):
             GPIO.setup(pin, GPIO.OUT)
             GPIO.output(pin, GPIO.LOW)
-        for pin in (config.ECHO_LEFT, config.ECHO_RIGHT):
+        for pin in (config.ECHO_LEFT, config.ECHO_RIGHT, config.ECHO_CENTER):
             GPIO.setup(pin, GPIO.IN)
 
         # Setup I2C (MLX90614)
@@ -149,8 +150,9 @@ class SensorsM3:
 
     def get_navigation_sensors(self) -> NavData:
         l = self._read_ultrasonic(config.TRIG_LEFT, config.ECHO_LEFT)
+        c = self._read_ultrasonic(config.TRIG_CENTER, config.ECHO_CENTER)
         r = self._read_ultrasonic(config.TRIG_RIGHT, config.ECHO_RIGHT)
-        return NavData(left_cm=l, right_cm=r, timestamp=time.time())
+        return NavData(left_cm=l, center_cm=c, right_cm=r, timestamp=time.time())
 
     def read_battery_adc(self) -> int:
         """Expose Battery ADC channel for M2"""
