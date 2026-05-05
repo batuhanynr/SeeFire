@@ -20,7 +20,9 @@ def test_get_fusion_sensors():
         assert fusion_data.ir_temp >= 0.0
 
 def test_get_navigation_sensors():
-    with patch.object(sensors._instance, '_read_ultrasonic', side_effect=[15.0, 20.0]):
+    # Mocking 3 sensor readings: left, center, right
+    with patch.object(sensors._instance, '_read_ultrasonic', side_effect=[15.0, 45.0, 20.0]):
         nav_data = sensors.get_navigation_sensors()
         assert nav_data.left_cm == 15.0
+        assert nav_data.center_cm == 45.0
         assert nav_data.right_cm == 20.0
