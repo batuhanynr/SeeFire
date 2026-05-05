@@ -1,15 +1,21 @@
 """
 M3 Sensors Implementation
 Follows the architecture rules defined in m3_sensors.h
-Uses SPI (MCP3008) for MQ-2, I2C for MLX90614, and GPIO for HC-SR04.
-(MPU6050 and DHT22 completely removed per v0.2 Pi4 hardware stability update)
+Uses SPI (MCP3208) for MQ-2, I2C for MLX90614, and GPIO for HC-SR04.
+Supports Mock Mode for development without physical sensors.
 """
 from dataclasses import dataclass
 import time
 import logging
-import RPi.GPIO as GPIO
-from smbus2 import SMBus
+
 try:
+    import RPi.GPIO as GPIO
+    MOCK_MODE = False
+except ImportError:
+    MOCK_MODE = True
+
+try:
+    from smbus2 import SMBus
     import adafruit_mlx90614
     MLX_AVAILABLE = True
 except ImportError:
@@ -49,6 +55,10 @@ class SensorsM3:
         self._spi = None
         
     def init_sensors(self) -> bool:
+        if MOCK_MODE:
+            logger.info("[MOCK] M3_Sensors initialized successfully.")
+            return True
+
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
         
@@ -69,28 +79,37 @@ class SensorsM3:
                 logger.error(f"MLX90614 I2C failed: {e}")
                 self._mlx_sensor = None
 
-        # Setup SPI (MCP3008 for MQ2)
+        # Setup SPI (MCP3208 for MQ2 and Battery)
         if SPI_AVAILABLE:
             try:
                 self._spi = spidev.SpiDev()
                 self._spi.open(0, 0)
                 self._spi.max_speed_hz = 1350000
-                logger.info("SPI MCP3008 connected for MQ-2.")
+                logger.info("SPI MCP3208 connected.")
             except Exception as e:
                 logger.error(f"SPI init failed: {e}")
                 self._spi = None
 
-        logger.info("M3_Sensors initialized successfully (Pi 4 Safe Mode).")
+        logger.info("M3_Sensors initialized successfully.")
         return True
 
-    def _read_mcp3008(self, channel: int) -> int:
+    def _read_mcp3208(self, channel: int) -> int:
+        if MOCK_MODE:
+            if channel == config.BATTERY_ADC_CH:
+                return int((7.4 / 3.3) * (config.VDIV_R2 / (config.VDIV_R1 + config.VDIV_R2)) * 4095) # mock bat
+            return 150 # mock smoke
+            
         if not self._spi:
             return 0
-        adc = self._spi.xfer2([1, (8 + channel) << 4, 0])
-        data = ((adc[1] & 3) << 8) + adc[2]
+        adc = self._spi.xfer2([6 | (channel >> 2), (channel & 3) << 6, 0])
+        data = ((adc[1] & 15) << 8) + adc[2]
         return data
 
     def _read_ultrasonic(self, trig_pin: int, echo_pin: int) -> float:
+        if MOCK_MODE:
+            import random
+            return random.uniform(15.0, 45.0)
+
         GPIO.output(trig_pin, GPIO.HIGH)
         time.sleep(0.00001)
         GPIO.output(trig_pin, GPIO.LOW)
@@ -109,12 +128,18 @@ class SensorsM3:
         return distance
 
     def get_fusion_sensors(self) -> FusionData:
-        smoke = self._read_mcp3008(config.MQ2_ADC_CH) if self._spi else 0
+        smoke = self._read_mcp3208(config.MQ2_ADC_CH)
         is_warm = time.time() - self._start_time > config.MQ2_WARMUP_SECONDS
+        
+        if MOCK_MODE:
+            is_warm = True # skip warmup in mock mode
+            
         alert = bool(smoke > self._smoke_threshold) if is_warm else False
         
         ir = 25.0
-        if self._mlx_sensor:
+        if MOCK_MODE:
+            ir = 28.5
+        elif self._mlx_sensor:
             try:
                 ir = float(self._mlx_sensor.object_temperature)
             except Exception:
@@ -127,16 +152,20 @@ class SensorsM3:
         r = self._read_ultrasonic(config.TRIG_RIGHT, config.ECHO_RIGHT)
         return NavData(left_cm=l, right_cm=r, timestamp=time.time())
 
+    def read_battery_adc(self) -> int:
+        """Expose Battery ADC channel for M2"""
+        return self._read_mcp3208(config.BATTERY_ADC_CH)
+
     def cleanup(self) -> None:
         if self._spi:
             self._spi.close()
         if self._bus:
             self._bus.close()
-        # Note: Let main.py call GPIO.cleanup()
 
 # Default singleton
 _instance = SensorsM3()
 init_sensors = _instance.init_sensors
 get_fusion_sensors = _instance.get_fusion_sensors
 get_navigation_sensors = _instance.get_navigation_sensors
+read_battery_adc = _instance.read_battery_adc
 cleanup = _instance.cleanup

@@ -153,7 +153,7 @@ class MotorM2:
 
     def get_battery_voltage(self) -> float:
         """
-        Reads the battery voltage via MCP3208 ADC.
+        Reads the battery voltage via MCP3208 ADC from M3 module.
         Returns the real voltage as a float.
         """
         if MOCK_MODE:
@@ -163,17 +163,20 @@ class MotorM2:
                 self.mock_battery_v = config.BATTERY_MAX_V # wrap around for testing
             return round(self.mock_battery_v, 2)
 
-        # NOTE: When M3 is ready, we pull SPI from it or write an isolated SPI read here.
-        # For now, we assume a placeholder function or M3 integration.
-        # This translates the ADC raw value to Analog Voltage, then calculates inverse of Voltage Divider.
-        adc_value = 0 # TODO: Hook into SPI ADC reading channel 'config.BATTERY_ADC_CH'
+        try:
+            from m3_sensors import sensors
+            adc_value = sensors.read_battery_adc()
+        except ImportError:
+            logger.warning("Could not import M3 sensors to read battery.")
+            adc_value = 0
+
         adc_ref_voltage = 3.3
-        adc_max = 4095.0 # 12-bit ADC
+        adc_max = 4095.0 # 12-bit ADC configured for MCP3208
         
         pin_voltage = (adc_value / adc_max) * adc_ref_voltage
         real_voltage = pin_voltage * ((config.VDIV_R1 + config.VDIV_R2) / config.VDIV_R2)
         
-        return real_voltage
+        return round(real_voltage, 2)
 
 # Provide the public API as module-level functions
 _instance = MotorM2()
