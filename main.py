@@ -19,15 +19,17 @@ def init() -> None:
     m7_logging.init()
     logger.info("M7 Data Logging initialized")
 
-    # M2 init would go here when available
-    # m2_motor.init()
+    from m2_motor import motor
+    motor.init_hardware()
+    logger.info("M2 Motor & Power initialized")
 
     m3_sensors.init_sensors()
     logger.info("M3 Sensor Integration initialized")
 
-    # M4 init would go here when available
-    # M5 init depends on M3
-    # M6 init depends on M3, M4
+    # M4, M5, M6 starting soon...
+    # from m4_vision import vision
+    # from m5_navigation import navigation
+    # from m6_decision import decision
 
 
 def main():
