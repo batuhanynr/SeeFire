@@ -5,8 +5,12 @@ from m3_sensors import sensors
 # Removed: MPU6050 and DHT22 hardware logic
 
 def test_sensor_init():
-    with patch('RPi.GPIO.setmode') as mock_setmode, \
-         patch('RPi.GPIO.setup') as mock_setup:
+    if sensors.MOCK_MODE:
+        assert sensors.init_sensors() == True
+        return
+
+    with patch('m3_sensors.sensors.GPIO.setmode') as mock_setmode, \
+         patch('m3_sensors.sensors.GPIO.setup') as mock_setup:
         assert sensors.init_sensors() == True
         mock_setmode.assert_called_once()
         assert mock_setup.call_count >= 4

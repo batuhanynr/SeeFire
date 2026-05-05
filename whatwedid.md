@@ -100,3 +100,24 @@ Bu bölümde, proje dokümantasyonu ile fiziksel gerçeklik arasındaki uyuşmaz
 - M6 decision FSM hâlâ EXPLORE/PATROL state'lerine sahip; bunların M5 `NavigationController.run()` çağrısına delege olması gerekiyor (sonraki PR).
 - `ENCODER_TICKS_PER_CM` ve `MOCK_CM_PER_SEC` fiziksel robotla kalibre edilmeli.
 - Dokümanlardaki (`docs/SeeFire_Interface_report.md`, `docs/SeeFire_Module_Documentation_Report.md`) eski `OBSTACLE_DIST_CM` / `WALL_FOLLOW_DIST_CM` / `GRID_RESOLUTION_M` referansları henüz güncellenmedi — sadece `config.py` temizlendi.
+
+---
+
+## Tarih: 5 Mayıs 2026 — Tutarlilik Duzeltmeleri
+**Geliştirici:** Codex
+
+### Yapilan Duzeltmeler
+
+- `CLAUDE.md` tamamen yeniden yazildi ve artik repo icin **current architecture note** gorevi goruyor.
+- `navigation_modulu.md` eski Arduino / wall-following / occupancy-grid taslagindan arindirilip mevcut Raspberry Pi tabanli sector-traverse mantigina gore guncellendi.
+- `m2_motor.h`, `m3_sensors.h`, `m4_vision.h`, `m5_navigation.h`, `m6_decision.h`, `m7_logging.h` dosyalari guncel Python davranisini yansitacak sekilde hizalandi.
+- Mock-mode unit testleri, `RPi.GPIO` bulunmayan gelistirme ortamlarinda da anlamli calisacak sekilde duzeltildi.
+
+### Yeni Source of Truth Sirasi
+
+Tutarsizlik durumunda su siralama gecerli kabul edilmelidir:
+1. Python implementasyonu
+2. `config.py`
+3. `CLAUDE.md`
+4. `docs/nelerdegisti.md`
+5. tarihsel raporlar ve eski roadmap belgeleri

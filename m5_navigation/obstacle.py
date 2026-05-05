@@ -4,9 +4,9 @@ M5 Obstacle avoidance.
 Strategy (see navigation_modulu.md §7):
   1. Decide turn direction (camera pixel split → ultrasonic fallback).
   2. Rotate 90° toward open side.
-  3. Side-pass: step forward while the LEFT ultrasonic still sees the
-     obstacle's surface; the obstacle is cleared when LEFT reading exceeds
-     OBSTACLE_CLEAR_CM.
+  3. Side-pass: step forward while the obstacle-facing side ultrasonic still
+     sees the obstacle's surface; the clearance side depends on turn
+     direction.
   4. Return to original route line using ENCODER ONLY (no sensors): the
      accumulated side distance is replayed in reverse.
   5. Lateral fine-tune via PositionVerifier.

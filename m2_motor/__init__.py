@@ -21,5 +21,5 @@ __all__ = [
     "init_hardware", "motor_drive", "motor_turn", "motor_stop",
     "set_alarm", "get_battery_voltage",
     "drive_distance_cm", "turn_left_90", "turn_right_90", "stop",
-    "get_total_distance_cm",
+    "get_total_distance_cm", "set_total_distance_cm",
 ]
