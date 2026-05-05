@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SeeFire Robot — Yapım Roadmap'i</title>
+<title>SeeFire — Paralel Çalışma Planı</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f9f8f4;color:#2c2c2a;padding:24px;max-width:760px;margin:0 auto}
@@ -34,185 +34,210 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .task-cb.done{background:#eaf3de;border-color:#97c459}
 .task-text{font-size:13px;color:#2c2c2a;line-height:1.55;flex:1}
 .task-text.done{color:#888780;text-decoration:line-through}
+.task-owner{font-size:10px;font-weight:700;color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px;flex-shrink:0;margin-top:3px}
 .tip-box{margin-top:12px;padding:10px 12px;background:#e6f1fb;border-radius:8px;border-left:3px solid #85b7eb}
 .tip-box p{font-size:12px;color:#185FA5;line-height:1.65}
 .tip-box strong{font-weight:600}
+.tip-warn{background:#fff6df;border-left-color:#d08a00}
+.tip-warn p{color:#6a4b00}
 .mod-chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:10px}
 .mod-chip{font-size:10px;padding:2px 8px;background:#f1efe8;border:0.5px solid #d3d1c7;border-radius:20px;color:#5f5e5a}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
 .stat-card{background:#f1efe8;border-radius:8px;padding:10px 12px;text-align:center}
 .stat-val{font-size:22px;font-weight:600;color:#2c2c2a}
 .stat-lbl{font-size:11px;color:#73726c;margin-top:2px}
+.rules-box{margin-bottom:16px;padding:12px 14px;background:#f1efe8;border-radius:10px;border:1px solid #d3d1c7}
+.rules-box h3{font-size:12px;font-weight:600;color:#2c2c2a;margin-bottom:8px}
+.rules-box ul{list-style:none;padding:0}
+.rules-box li{font-size:12px;color:#5f5e5a;line-height:1.7;padding-left:14px;position:relative}
+.rules-box li::before{content:"•";position:absolute;left:0;color:#1D9E75;font-weight:700}
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:#5f5e5a}
+.legend-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0}
 </style>
 </head>
 <body>
 <div class="rm-wrap">
+
 <div style="margin-bottom:16px;padding:12px 14px;border-left:4px solid #d08a00;background:#fff6df;border-radius:8px;font-size:12px;line-height:1.6;color:#6a4b00;">
-  <strong>Not:</strong> Bu roadmap tarihsel bir plan dokumanidir. Guncel repo mimarisi ve uygulanan degisiklikler icin
-  <code>CLAUDE.md</code> ve <code>docs/nelerdegisti.md</code> dosyalarini esas alin.
+  <strong>Kaynak:</strong> Bu roadmap Emre Can Tunçer tarafından hazırlanan "SeeFire Paralel Çalışma Planı — Rapor v2.0 ile uyumlu" dokümanına dayanır.
+  Guncel repo durumu icin <code>CLAUDE.md</code> ve <code>docs/nelerdegisti.md</code> dosyalarini esas alin.
 </div>
+
 <div class="rm-header">
   <div>
-    <div class="rm-title">SeeFire Robot — Yapım Roadmap'i</div>
-    <div class="rm-sub">Tahmini süre: 3–4 hafta | 7 faz</div>
+    <div class="rm-title">SeeFire — Paralel Çalışma Planı</div>
+    <div class="rm-sub">Kişi Bazlı Adım Adım Yol Haritası | 6 Faz | Rapor v2.0 uyumlu</div>
   </div>
 </div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#1D9E75"></div> Hemen başlanabilir (laptop)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#D08A00"></div> Başka adım bekliyor</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#D85A30"></div> Donanım gerekli</div>
+</div>
+
 <div class="stats">
   <div class="stat-card"><div class="stat-val" id="s-done">0</div><div class="stat-lbl">Tamamlanan görev</div></div>
   <div class="stat-card"><div class="stat-val" id="s-total">0</div><div class="stat-lbl">Toplam görev</div></div>
   <div class="stat-card"><div class="stat-val" id="s-pct">0%</div><div class="stat-lbl">İlerleme</div></div>
 </div>
 <div class="progress-bar"><div class="progress-fill" id="prog" style="width:0%"></div></div>
+
+<div class="rules-box">
+  <h3>Temel Kurallar</h3>
+  <ul>
+    <li>Arduino yok — tüm I/O doğrudan Raspberry Pi GPIO üzerinden</li>
+    <li>config.py tek kaynak — modül içinde asla hardcode yok</li>
+    <li>Mock Mode zorunlu — laptop'ta donanım olmadan çalışabilmeli</li>
+    <li>MCP3208 12-bit (0–4095) — eski 1023 değeri geçersiz</li>
+    <li>Batarya eşikleri 2S 18650: uyarı 6.8V, kritik 6.4V</li>
+    <li>Sektör orta nokta snapshot'ı hiçbir koşulda atlanamaz</li>
+  </ul>
+</div>
+
 <div class="phases" id="phases"></div>
 </div>
+
 <script>
 const phases=[
 {
-  name:"Fiziksel Montaj & Güç Kurulumu",
-  dur:"Tahmini: 1–2 gün",
-  mods:["M1 — Şasi & Mekanik","M2 — Motor & Güç"],
+  name:"Faz 1 — Laptop Mock Geliştirme",
+  dur:"Donanım gerekmez | BATUHAN, YUSUF, EMRE, SEMİH, FURKAN paralel | BEKİR M2 iskeleti | ALPEREN & HALİL montaj planı",
+  mods:["M2","M3","M4","M5","M6","M7"],
+  color:"#1D9E75",bg:"#E1F5EE",tcolor:"#085041",
+  tag:"Mock",tagbg:"#E1F5EE",tagc:"#085041",
+  tasks:[
+    {t:"Batuhan — M7 SQLite şeması ve WAL modu: init(), log_event(), get_events()",o:"BATUHAN"},
+    {t:"Batuhan — M7 save_map() atomik yazma, load_map(), save_snapshot()",o:"BATUHAN"},
+    {t:"Batuhan — M7 birim testleri: WAL, concurrent yazma, atomik map, snapshot dizini",o:"BATUHAN"},
+    {t:"Yusuf — M7 persistence + M5 NavigationController mock iskeleti",o:"YUSUF"},
+    {t:"Yusuf — M5 mock uçtan uca test: 3 sektörde tam 6 snapshot (3 midpoint + 3 waypoint)",o:"YUSUF"},
+    {t:"Bekir — M2 sınıf iskeleti: yön tablosu, motor_drive, motor_turn, set_alarm, get_battery_voltage",o:"BEKİR"},
+    {t:"Bekir — M2 mock mode: drive_distance_cm, turn_left_90, turn_right_90, encoder simülasyonu",o:"BEKİR"},
+    {t:"Bekir — M2 birim testleri (mock modda)",o:"BEKİR"},
+    {t:"Emre — M4 YOLOv8n çıkarım boru hattı: arka plan thread, 320×320, mutex korumalı result",o:"EMRE"},
+    {t:"Emre — M4 determine_turn_direction(): Canny edge + ROI + piksel sayımı",o:"EMRE"},
+    {t:"Emre — M6 FSM durum geçiş iskeleti: INIT→NAVIGATE→VERIFY→ALARM→STOP",o:"EMRE"},
+    {t:"Semih — M6 füzyon skoru hesaplama: (0.5×vision)+(0.3×smoke/4095)+(0.2×IR_score)",o:"SEMİH"},
+    {t:"Semih — M6 durum geçiş birim testleri: tüm yollar mock sensör ile",o:"SEMİH"},
+    {t:"Furkan — M5 PositionVerifier: verify_start() ve verify_and_correct()",o:"FURKAN"},
+    {t:"Furkan — M5 ObstacleAvoidance: yön kararı (kamera+ultrasonic), yan geçiş, encoder geri dönüş",o:"FURKAN"},
+    {t:"Furkan — M5 mock uçtan uca entegrasyon testi",o:"FURKAN"},
+    {t:"Furkan — M6 batarya izleme mantığı (mock)",o:"FURKAN"},
+    {t:"Alperen — Malzeme kontrolü, eksik sipariş, şasi montaj planı",o:"ALPEREN"},
+    {t:"Halil — Montaj planı çizimi, kablo planı, encoder disk kurulumu",o:"HALİL"}
+  ],
+  tip:"<strong>Faz 1 Kapanış:</strong> Her kişi mock demosunu ekran paylaşımıyla gösterir. Tüm testler yeşil olmalı. Mock test geçmeyen adım tamamlanmış sayılmaz."
+},
+{
+  name:"Faz 2 — Fiziksel Montaj",
+  dur:"Donanım gerekli | ALPEREN, HALİL, BEKİR | EMRE Pi'de M4 test",
+  mods:["M1","M2","M3","M4"],
   color:"#7F77DD",bg:"#EEEDFE",tcolor:"#3C3489",
   tag:"Donanım",tagbg:"#EEEDFE",tagc:"#3C3489",
   tasks:[
-    "4WD şasi kitini monte et (şase plakalarını, motorları ve tekerlekleri tak)",
-    "4 adet TT motoru L298N motor sürücüsüne bağla (sol 2 paralel, sağ 2 paralel)",
-    "2S 18650 Li-ion 7.4V bataryayı XT60 konnektörle devreye al",
-    "LM2596 step-down modülünü 5V'a ayarla ve Pi'yi besle (multimetreyle ölç!)",
-    "Raspberry Pi 4B'yi şasiye vida veya bant ile sabitle",
-    "GPIO, GND ve 5V hatlarını breadboard üzerinden dağıt",
-    "Bütün kablo bağlantılarını zipte veya bant ile düzenle"
+    {t:"Alperen — 4WD şasi kitini monte et (şase plakaları, motorlar, tekerlekler)",o:"ALPEREN"},
+    {t:"Alperen — LM2596 step-down modülünü 5V'a ayarla (multimetreyle doğrula!)",o:"ALPEREN"},
+    {t:"Alperen — Raspberry Pi 4B'yi şasiye sabitle, güç dağıtımını tamamla",o:"ALPEREN"},
+    {t:"Alperen — 3× HC-SR04 gerilim bölücüler (1kΩ + 2kΩ, her Echo pini için)",o:"ALPEREN"},
+    {t:"Alperen — MLX90614 I2C bağlantısı (SDA=GPIO2, SCL=GPIO3)",o:"ALPEREN"},
+    {t:"Halil — Encoder disk kurulumu (sol tekerlek GPIO 6, sağ tekerlek GPIO 21)",o:"HALİL"},
+    {t:"Halil — Sensör braket montajı (sol, ön, sağ ultrasonik)",o:"HALİL"},
+    {t:"Halil — Batarya gerilim bölücüsü (R1=20kΩ, R2=10kΩ) MCP3208 CH1'e",o:"HALİL"},
+    {t:"Bekir — L298N IN1-IN4 + ENA/ENB GPIO kablolaması",o:"BEKİR"},
+    {t:"Emre — M4 Pi üzerinde FPS benchmark: YOLOv8n INT8 hedef ≥3 FPS",o:"EMRE"},
+    {t:"Emre — Pi SSH erişimi, 5V doğrulaması, kamera algılama (lsusb)",o:"EMRE"}
   ],
-  tip:"<strong>İlk kural:</strong> Raspberry Pi'yi bağlamadan önce LM2596 çıkışının kesinlikle 5V olduğunu multimetreyle doğrula. Yanlış voltaj Pi'yi yakabilir. LiPo'yu doğrudan Pi'ye bağlama!"
+  tip:"<strong>Kritik güvenlik:</strong> Pi'yi bağlamadan önce LM2596 çıkışının kesinlikle 5V olduğunu multimetreyle doğrula. HC-SR04 Echo pinini direkt Pi GPIO'ya bağlamak pini kalıcı olarak bozar — bölücü şart!"
 },
 {
-  name:"Raspberry Pi Kurulumu & Yazılım Ortamı",
-  dur:"Tahmini: yarım–1 gün",
-  mods:["M2","M3","M4"],
-  color:"#1D9E75",bg:"#E1F5EE",tcolor:"#085041",
-  tag:"Yazılım",tagbg:"#E1F5EE",tagc:"#085041",
-  tasks:[
-    "Raspberry Pi OS 64-bit'i microSD'ye yaz (Raspberry Pi Imager ile)",
-    "SSH'ı aktif et, WiFi'ı yapılandır (headless kurulum)",
-    "sudo apt update && apt upgrade komutlarını çalıştır",
-    "Python 3.11+ ve pip'i kontrol et, gerekli paketleri kur",
-    "RPi.GPIO veya gpiozero kütüphanesini kur ve test et",
-    "OpenCV'yi kur: pip install opencv-python-headless",
-    "GitHub reposunu oluştur, Pi'ye klonla — herkesi collaborator yap",
-    "config.py dosyasını oluştur: tüm GPIO pin numaraları buraya"
-  ],
-  tip:"<strong>Zaman kazandıran ipucu:</strong> Herkese aynı config.py'yi paylaşın. GPIO numaraları (MOTOR_IN1=17 vb.) bir kez tanımlanınca modüller arası çakışma olmaz. SSH ile Pi'ye laptop'tan bağlanmak için aynı WiFi ağında olun."
-},
-{
-  name:"Motor Kontrolü — M2 Modülü",
-  dur:"Tahmini: 1–2 gün",
-  mods:["M2 — Motor Control & Power"],
+  name:"Faz 3 — Sensör ve Motor Fiziksel Testi",
+  dur:"Bloklayan: Faz 2 kapanış | BEKİR, ALPEREN, BATUHAN",
+  mods:["M2","M3"],
   color:"#BA7517",bg:"#FAEEDA",tcolor:"#633806",
-  tag:"M2",tagbg:"#FAEEDA",tagc:"#633806",
+  tag:"Pi Test",tagbg:"#FAEEDA",tagc:"#633806",
   tasks:[
-    "L298N IN1-IN4 pinlerini GPIO'ya bağla (bağlantı şemasına göre)",
-    "ENA ve ENB pinlerine PWM çıkışı yaz (1 kHz frekans)",
-    "ileri(), geri(), sola_don(), saga_don(), dur() fonksiyonlarını yaz",
-    "Motoru farklı PWM duty cycle'larıyla test et (30%, 60%, 100%)",
-    "MCP3208 SPI bağlantısını kur ve Li-ion voltaj ölçümünü dene",
-    "Voltaj bölücüyü breadboard'da kur: R1=20kΩ, R2=10kΩ",
-    "LED (GPIO 26) ve Buzzer (GPIO 19) test et: m2_set_alarm()",
-    "m2_motor_turn(angle) için zamanlama kalibrasyonu yap (90° = kaç ms?)"
+    {t:"Bekir — L298N init_hardware() fiziksel test: GPIO + PWM + encoder interrupt",o:"BEKİR"},
+    {t:"Bekir — Temel hareket testi: ileri 50cm, geri 50cm, sağa 90°, sola 90°",o:"BEKİR"},
+    {t:"Bekir — Encoder kalibrasyonu: drive_distance_cm(100) gerçek mesafe ile ölç, ENCODER_TICKS_PER_CM güncelle",o:"BEKİR"},
+    {t:"Bekir — 90° dönüş kalibrasyonu: MOCK_TURN_90_SECONDS ayarla",o:"BEKİR"},
+    {t:"Bekir — Alarm çıkışları: LED (GPIO 26) ve Buzzer (GPIO 19) test",o:"BEKİR"},
+    {t:"Alperen — HC-SR04 sürücüsü: 3 sensörden mesafe oku, cross-talk kontrolü",o:"ALPEREN"},
+    {t:"Alperen — Medyan filtreli okuma testi: get_navigation_sensors_filtered(samples=3)",o:"ALPEREN"},
+    {t:"Batuhan — MCP3208 SPI sürücüsü: 12-bit okuma, MQ-2 CH0 + batarya CH1",o:"BATUHAN"},
+    {t:"Batuhan — MQ-2 60 sn ısınma testi, baseline kaydı, FusionData doğrulama",o:"BATUHAN"},
+    {t:"Alperen — MLX90614 I2C: i2cdetect -y 1 ile 0x5A doğrula, sıcaklık oku",o:"ALPEREN"},
+    {t:"Bekir — Batarya izleme: voltaj bölücü + MCP3208, multimetre ile çapraz kontrol",o:"BEKİR"},
+    {t:"Tüm — M3 entegrasyon testi: 3 sensör + MQ-2 + MLX + batarya birlikte çalışıyor",o:"BEKİR"}
   ],
-  tip:"<strong>Test sırası:</strong> Önce motorsuz GPIO komutlarını test et (multimetre ile pin voltajları), sonra motorları tak. Robot masada yüksekte dururken wheel spin testi yap — zemine koymadan hareketi doğrula."
+  tip:"<strong>Test sırası:</strong> Robot masada yüksekte dururken wheel spin testi yap — zemine koymadan hareketi doğrula. Encoder kalibrasyonu demo için kritik — ±2cm tolerans hedefle."
 },
 {
-  name:"Sensör Entegrasyonu — M3 Modülü",
-  dur:"Tahmini: 1–2 gün",
-  mods:["M3 — Sensor Integration"],
-  color:"#D85A30",bg:"#FAECE7",tcolor:"#4A1B0C",
-  tag:"M3",tagbg:"#FAECE7",tagc:"#4A1B0C",
-  tasks:[
-    "3x HC-SR04 ultrasonik sensörü GPIO'ya bağla (Ön, Sağ, Sol, TRIG/ECHO + 5V→3.3V bölücü)",
-    "HC-SR04 okuma fonksiyonunu yaz ve mesafeyi test et (üç sensörden veri al)",
-    "MLX90614 IR sensörü I2C'ye bağla (SDA=GPIO2, SCL=GPIO3, 3.3V)",
-    "i2cdetect -y 1 ile 0x5A adresini doğrula",
-    "MQ-2 gaz sensörünü MCP3208 CH0'a bağla, SPI'ı aktif et",
-    "MQ-2'nin 60 sn ısınma süresini bekle, kalibrasyon oku",
-    "m3_get_fusion_sensors() fonksiyonunu yaz (smoke_level, ir_temp, timestamp)",
-    "m3_get_ultrasonic_distances() fonksiyonunu yaz ve engel tespitini dene"
-  ],
-  tip:"<strong>Dikkat:</strong> HC-SR04 Echo pini 5V çıkış verir — Pi'nin 3.3V GPIO'su için voltaj bölücü şart (1kΩ + 2kΩ). Aksi halde GPIO pini zarar görür. MLX90614 bağlantı kablolarını kısa tut, uzun jumper I2C'yi bozabilir."
-},
-{
-  name:"AI & Görü — M4 Modülü (YOLOv8n)",
-  dur:"Tahmini: 2–3 gün",
-  mods:["M4 — AI & Vision"],
-  color:"#534AB7",bg:"#EEEDFE",tcolor:"#26215C",
-  tag:"M4 · AI",tagbg:"#EEEDFE",tagc:"#534AB7",
-  tasks:[
-    "Logitech C270 USB kamerayı Pi'ye tak, lsusb ile algılandığını doğrula",
-    "pip install ultralytics ile YOLOv8 kur (internet bağlantısı gerekli)",
-    "YOLOv8n modelini indir: yolov8n.pt (fire/smoke için Roboflow dataset'i bul)",
-    "Modeli INT8 quantize et — Pi 4'te inference hızı için kritik",
-    "OpenCV ile 320×320 frame yakala ve YOLOv8'e ver",
-    "m4_start_pipeline() arka plan thread'ini yaz (capture→infer→postprocess)",
-    "m4_vision_result_t struct'ına sonucu yaz (class_id, confidence, bbox)",
-    "Pi 4'te FPS'i ölç: hedef 5 FPS (200ms per frame). Gerekirse optimize et"
-  ],
-  tip:"<strong>Pi 4'te hız:</strong> YOLOv8n INT8 ile 320×320 çözünürlükte ~150ms inference mümkün. Daha büyük model veya çözünürlük deneme — Pi donabilir. Kamerayı önce basit OpenCV scripti ile test et, YOLO sonra."
-},
-{
-  name:"Navigasyon & Engelden Kaçınma — M5 Modülü",
-  dur:"Tahmini: 2–3 gün",
-  mods:["M5 — Navigation & Mapping"],
+  name:"Faz 4 — Navigasyon ve Engel Kaçınma Fiziksel Testi",
+  dur:"Bloklayan: Faz 3 kapanış | FURKAN, YUSUF | BEKİR destek",
+  mods:["M5"],
   color:"#0F6E56",bg:"#E1F5EE",tcolor:"#04342C",
-  tag:"M5",tagbg:"#E1F5EE",tagc:"#04342C",
+  tag:"M5 Fiziksel",tagbg:"#E1F5EE",tagc:"#04342C",
   tasks:[
-    "M3'ten ultrasonik mesafe verilerini oku ve eşik değerlerini belirle (<20cm = engel)",
-    "Basit engelden kaçınma mantığı: ön engel → sağa/sola bak → dön",
-    "Wall-following algoritması: sağ sensörle duvar mesafesini koru",
-    "Dead reckoning ile konum tahmini (ileri × hız × süre = mesafe)",
-    "Basit occupancy grid oluştur (2D liste, 1=engel, 0=boş, -1=bilinmiyor)",
-    "m5_navigate_to() ve m5_update_map() fonksiyonlarını yaz",
-    "Robotun bir odada dönüp engelleri haritalamasını test et",
-    "Keşif stratejisi: bilinmeyen alanlara yönel (frontier-based basit versiyon)"
+    {t:"Furkan — verify_start() fiziksel test: bilinen noktada geçiyor, 15cm kayınca RuntimeError fırlatıyor",o:"FURKAN"},
+    {t:"Furkan — START_LEFT_CM ve START_RIGHT_CM'yi gerçek duvar mesafelerine göre güncelle",o:"FURKAN"},
+    {t:"Yusuf — Tek sektör traversali: WAYPOINTS=[(100,1)], 50cm midpoint snapshot + 100cm waypoint snapshot",o:"YUSUF"},
+    {t:"Yusuf — 3 sektör tam rota testi: 300cm güzergah, toplam 6 snapshot, ±5cm tolerans",o:"YUSUF"},
+    {t:"Furkan — Engel kaçınma testi: sektör 2 ortasına karton kutu, bypass + midpoint snapshot doğrulama",o:"FURKAN"},
+    {t:"Furkan — Kamera yön kararı vs ultrasonik fallback karşılaştırması",o:"FURKAN"},
+    {t:"Furkan — Pozisyon düzeltme ince ayarı: verify_and_correct() aşırı düzeltme yapıyor mu?",o:"FURKAN"},
+    {t:"Yusuf — Encoder birikimli sapma kontrolü: 300cm sonunda pozisyon sapması var mı?",o:"YUSUF"}
   ],
-  tip:"<strong>İlk hedef basit tutun:</strong> Harita mükemmel olmak zorunda değil. Önce güvenli engelden kaçınmayı sağlayın — robot duvara çarpmıyorsa navigasyon çalışıyor demektir. Dead reckoning birikimli hata yapar, beklenen bu."
+  tip:"<strong>Kritik kontrol:</strong> Engel bypass sırasında sektör 2 orta nokta snapshot'ı mutlaka tetiklenmeli. midpoint_callback hem ana döngüden hem yan geçiş döngüsünden çağrılıyor. Encoder ile geri dönüşte sensör kullanılmaz — yan sensör güneye bakar, yanlış erken durdurma üretir."
 },
 {
-  name:"Karar Motoru (FSM) — M6 & Loglama — M7",
-  dur:"Tahmini: 2–3 gün",
-  mods:["M6 — Decision Engine","M7 — Data Logging"],
-  color:"#185FA5",bg:"#E6F1FB",tcolor:"#042C53",
-  tag:"M6 · M7",tagbg:"#E6F1FB",tagc:"#042C53",
+  name:"Faz 5 — Karar Motoru M6 Entegrasyonu",
+  dur:"Bloklayan: Faz 4 kapanış + M4 Pi testi | EMRE, SEMİH, FURKAN, HALİL",
+  mods:["M6","M4","M5","M2","M7"],
+  color:"#534AB7",bg:"#EEEDFE",tcolor:"#26215C",
+  tag:"M6 Entegrasyon",tagbg:"#EEEDFE",tagc:"#534AB7",
   tasks:[
-    "FSM state enum'u oluştur: INIT, EXPLORE, PATROL, VERIFY, ALARM",
-    "INIT → EXPLORE: sensörler hazır olunca geçiş",
-    "EXPLORE → PATROL: smoke_alert veya yüksek ir_temp algılandığında",
-    "PATROL → VERIFY: YOLO confidence > 0.5 olduğunda (robot durur, M4 frame alır)",
-    "VERIFY → ALARM: confidence > 0.7 veya fusion skoru yüksekse — LED + buzzer",
-    "SQLite veritabanı oluştur: m7_log_event() fonksiyonu ile her olayı kaydet",
-    "JPEG snapshot'ı kaydet: ALARM state'inde kamera karesi disk'e yaz",
-    "Ana döngüyü çalıştır: tüm modülleri birbirine bağla ve gerçek test yap"
+    {t:"Halil — ALARM aksiyon zinciri: capture_frame → log_event → save_snapshot → set_alarm < 50ms",o:"HALİL"},
+    {t:"Furkan — M5'i M6 NAVIGATE durumuna bağla: NavigationController.run() ayrı thread'de",o:"FURKAN"},
+    {t:"Furkan — snapshot_callback arayüzü: M6 handler → M4 capture → M7 log + snapshot",o:"FURKAN"},
+    {t:"Emre & Semih — FSM mock entegrasyon: tüm durumları sahte sensör ile tetikle",o:"EMRE"},
+    {t:"Halil — Batarya izleme FSM entegrasyonu: kritik durumda döngü duruyor",o:"HALİL"},
+    {t:"Emre & Semih — Tam fiziksel entegrasyon: main.py robot üzerinde, tüm modüller init",o:"EMRE"},
+    {t:"Tüm — ALARM döngüsü testi: çakmak (MQ-2) + sıcak nesne (MLX) + yangın videosu (YOLO) → LED + buzzer + JPEG + SQLite",o:"EMRE"},
+    {t:"Tüm — Manuel reset testi: ALARM → NAVIGATE dönüşü, devam eden rota",o:"EMRE"}
   ],
-  tip:"<strong>Entegrasyon sırası:</strong> Önce sadece M6 FSM'i print() ile test edin (gerçek sensör olmadan mock data). Sonra M3'ü bağlayın, sonra M4'ü. Her adımda tek bir modül ekleyerek hata yerini kolayca bulabilirsiniz."
+  tip:"<strong>Faz 5 Kapanış:</strong> Canlı demo — tam ALARM döngüsü fiziksel robot. SQLite canlı sorgu: <code>SELECT * FROM events ORDER BY id DESC LIMIT 10;</code> Snapshot klasöründe JPEG görünüyor olmalı."
 },
 {
-  name:"Entegrasyon Testi & Kalibrasyon",
-  dur:"Tahmini: 3–5 gün (süregelen)",
-  mods:["Tüm Modüller","Test & Demo"],
+  name:"Faz 6 — Kalibrasyon, Test ve Demo Hazırlığı",
+  dur:"Bloklayan: Faz 5 kapanış | Tüm 8 kişi",
+  mods:["Tüm Modüller","Demo"],
   color:"#3d3d3a",bg:"#F1EFE8",tcolor:"#2C2C2A",
   tag:"Final",tagbg:"#F1EFE8",tagc:"#444441",
   tasks:[
-    "Sistemi uçtan uca test et: robotu odaya koy ve çalıştır",
-    "MQ-2 ve MLX90614 eşik değerlerini gerçek ateş/duman ile kalibre et (DİKKATLİ!)",
-    "YOLO confidence threshold'unu ayarla: yanlış alarm vs kaçırma dengesi",
-    "Batarya voltaj eşiklerini 2S 18650 pakete göre güncelle (LOW=6.8V, CRIT=6.4V)",
-    "Motor hız dengesini ayarla: sol ve sağ motorlar aynı hızda mı gidiyor?",
-    "Parkur testi: robotun odada engelleri aşarak yangın kaynağına ulaşmasını doğrula",
-    "Log dosyalarını kontrol et: olaylar doğru kaydediliyor mu?",
-    "Demo senaryosu hazırla ve kuru çalışma yap"
+    {t:"Bekir — Encoder son kalibrasyonu: demo ortamında drive_distance_cm(100) ×3, ±2cm",o:"BEKİR"},
+    {t:"Alperen — START_LEFT/RIGHT kalibrasyonu: demo başlangıç noktasında filtered(samples=5) ile ölç",o:"ALPEREN"},
+    {t:"Batuhan — WAYPOINTS demo ortamına göre güncelleme: gerçek güzergah uzunluğunu ölç",o:"BATUHAN"},
+    {t:"Emre — YOLO güven eşiği ince ayarı: demo aydınlatmasında yanlış pozitif testi (kırmızı nesne)",o:"EMRE"},
+    {t:"Batuhan — MQ-2 duman eşiği ince ayarı: temiz hava baseline + çakmaklık tetikleme",o:"BATUHAN"},
+    {t:"Semih — Stres testi: Pi'yi yeniden başlatmadan 3 ardışık demo koşusu, hata yok, tüm snapshotlar kayıtlı",o:"SEMİH"},
+    {t:"Halil & Yusuf — Demo senaryosu yaz: başlangıç → çalıştır → sektör gezisi → yangın uyaranı → ALARM → SQLite gösterimi (≤5dk)",o:"HALİL"},
+    {t:"Furkan — Engel kaçınma demo varyantı: sektör 2'ye kutu koy, detour sırasında midpoint snapshot doğrula",o:"FURKAN"},
+    {t:"Tüm — Final demo provası: 2 tam koşu, zaman ölçümü, rol paylaşımı, teknik Q&A hazırlık",o:"Tüm"}
   ],
-  tip:"<strong>Stres testi önemli:</strong> Robotu tek başına 10 dakika çalıştırın. Batarya bitmeden duruyor mu? Aynı mekânda birkaç kez güvenilir şekilde yangın buluyor mu? Tek seferlik çalışma yetmez — tutarlılığı test edin."
+  tip:"<strong>Stres testi önemli:</strong> Robotu tek başına 10 dakika çalıştır. Batarya bitmeden duruyor mu? Aynı mekânda birkaç kez güvenilir şekilde yangın buluyor mu? Demo sırasında her kişi kendi modülünü anlatmaya hazır olsun."
 }
 ];
 
+const ownerColors={
+  "BEKİR":"#7F77DD","BATUHAN":"#1D9E75","YUSUF":"#0F6E56","EMRE":"#534AB7",
+  "SEMİH":"#BA7517","FURKAN":"#D85A30","ALPEREN":"#185FA5","HALİL":"#3d3d3a","Tüm":"#2c2c2a"
+};
+
 let checks={};
+try{checks=JSON.parse(localStorage.getItem('seefire_roadmap')||'{}');}catch(e){}
+function save(){localStorage.setItem('seefire_roadmap',JSON.stringify(checks));}
 function render(){
   const el=document.getElementById('phases');
   el.innerHTML='';
@@ -236,12 +261,19 @@ function render(){
 </div>
 <div class="phase-body" id="body-${pi}">
   <div class="tasks-title">Görevler</div>
-  ${p.tasks.map((t,ti)=>`
+  ${p.tasks.map((task,ti)=>{
+    const isObj = typeof task === 'object';
+    const txt = isObj ? task.t : task;
+    const owner = isObj ? task.o : null;
+    const oc = owner ? (ownerColors[owner]||'#888') : '#888';
+    return `
   <div class="task">
     <div class="task-cb ${checks[pi+'-'+ti]?'done':''}" onclick="chk(${pi},${ti})">${checks[pi+'-'+ti]?'✓':''}</div>
-    <div class="task-text ${checks[pi+'-'+ti]?'done':''}">${t}</div>
-  </div>`).join('')}
-  <div class="tip-box"><p>${p.tip}</p></div>
+    <div class="task-text ${checks[pi+'-'+ti]?'done':''}">${txt}</div>
+    ${owner?`<div class="task-owner" style="background:${oc}">${owner}</div>`:''}
+  </div>`;
+  }).join('')}
+  <div class="tip-box ${p.tip_warn?'tip-warn':''}"><p>${p.tip}</p></div>
   <div class="mod-chips">${p.mods.map(m=>`<span class="mod-chip">${m}</span>`).join('')}</div>
 </div>`;
     el.appendChild(card);
@@ -261,6 +293,7 @@ function toggle(pi){
 function chk(pi,ti){
   const key=pi+'-'+ti;
   checks[key]=!checks[key];
+  save();
   const wasOpen=document.getElementById('body-'+pi).classList.contains('open');
   render();
   if(wasOpen){
