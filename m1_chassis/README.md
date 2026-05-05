@@ -18,6 +18,7 @@ One-sentence purpose: Defines the 4WD wheeled platform structure, motor mounts (
 | **Height** | 100 mm | Body clearance |
 | **Wheelbase** | 140 mm | Front-to-rear axle distance |
 | **Track Width** | 120 mm | Left-to-right wheel distance |
+| **SBC** | Raspberry Pi 4 | 4GB RAM variant |
 
 ### Motor System (4WD)
 | Parameter | Value | Notes |
@@ -31,9 +32,9 @@ One-sentence purpose: Defines the 4WD wheeled platform structure, motor mounts (
 ### Power Distribution
 | Component | Voltage | Current (Idle) | Current (Max) | Notes |
 |-----------|---------|---|---|---|
-| **LiPo Battery (2S1P)** | 7.4 V nom. | — | 20 A | 2200 mAh; XT60 connector |
-| **Motor Controller (L298N)** | 7.4 V → 6 V | — | 16 A | Dual H-bridges for 4 motors |
-| **RPi + Peripherals** | 5.0 V (regulated) | 0.5 A | 2.0 A | Separate buck converter from LiPo |
+| **Li-ion Pack (2S1P)** | 7.4 V nom. | — | 10-20 A | 2x 18650 (2600 mAh); XT60 connector |
+| **Motor Controller (L298N)** | 7.4 V → 6 V | — | 2 A | Dual H-bridges for 4 motors |
+| **RPi + Peripherals** | 5.0 V (regulated) | 0.5 A | 3.0 A | Separate buck converter from Li-ion |
 | **Alarm System** | 5.0 V | 0.05 A | 0.5 A | LED + buzzer on 330 Ω + 100 Ω |
 
 ---
@@ -56,8 +57,9 @@ Motor IDs: 0=FL, 1=FR, 2=RL, 3=RR
 ### Sensor Mounting Points
 | Sensor | Location | Offset | Mount Height | Purpose |
 |--------|----------|--------|--------------|---------|
-| **HC-SR04 (Front)** | Front center | ±25 mm from edge | ~50 mm | Obstacle detection |
-| **HC-SR04 (Right)** | Right side | ±15 mm from wheel | ~50 mm | Wall-following |
+| **HC-SR04 (Center)** | Front center | 0 mm | ~50 mm | Obstacle detection |
+| **HC-SR04 (Right)** | Front right corner | 45 deg angle | ~50 mm | Wall-following/Cornering |
+| **HC-SR04 (Left)** | Front left corner | 45 deg angle | ~50 mm | Wall-following/Cornering |
 | **MLX90614** | Top center | — | ~80 mm | IR temperature (fire detection) |
 | **MQ-2** | Top-front | ±15 mm | ~60 mm | Smoke/gas sensor |
 | **USB Webcam** | Front-top | ±10 mm tilt | ~90 mm | Fire/smoke vision |
@@ -70,7 +72,7 @@ Motor IDs: 0=FL, 1=FR, 2=RL, 3=RR
 |---|---|---|
 | **4× DC 6V Motors** | Hardware | Geared motors with 3 mm shaft |
 | **4× Plastic Wheels** | Hardware | 65 mm diameter, friction tires |
-| **LiPo 2S1P Battery** | Hardware | 7.4 V / 2200 mAh; XT60 connector |
+| **Li-ion 2S Pack** | Hardware | 7.4 V / 2600 mAh (18650 cells) |
 | **L298N Motor Controller** | Hardware | Dual H-bridge; supports 4 motors |
 | **Motor Mounts** | Hardware | Aluminum brackets or 3D-printed |
 | **Chassis Frame** | Hardware | Aluminum or acrylic base + walls |
