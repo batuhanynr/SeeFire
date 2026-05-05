@@ -97,6 +97,65 @@ Bu bölümde, proje dokümantasyonu ile fiziksel gerçeklik arasındaki uyuşmaz
 - Engel-yolu mock dry-run: front sensör threshold'u zorlandığında `RIGHT` yönüne bypass, 10 cm yan-geçiş sonrası clear, lateral fine-tune çalıştı.
 
 ### Eski Mimariden Geri Kalan İş
-- M6 decision FSM hâlâ EXPLORE/PATROL state'lerine sahip; bunların M5 `NavigationController.run()` çağrısına delege olması gerekiyor (sonraki PR).
 - `ENCODER_TICKS_PER_CM` ve `MOCK_CM_PER_SEC` fiziksel robotla kalibre edilmeli.
-- Dokümanlardaki (`docs/SeeFire_Interface_report.md`, `docs/SeeFire_Module_Documentation_Report.md`) eski `OBSTACLE_DIST_CM` / `WALL_FOLLOW_DIST_CM` / `GRID_RESOLUTION_M` referansları henüz güncellenmedi — sadece `config.py` temizlendi.
+- M6 decision engine henüz implement edilmedi — FSM döngüsü, fusion score hesaplama ve alarm orkestrasyonu bekliyor.
+- M4 YOLOv8n inference pipeline henüz entegre edilmedi — sadece kamera ve engel yön ipucu mevcut.
+- M5 ve M6 `main.py`'ye henüz bağlanmadı.
+
+---
+
+## Tarih: 5 Mayıs 2026 — Kod Tutarsızlık Düzeltmeleri
+**Geliştirici:** Bekir Emre Sarıpınar
+
+### Yapılan Düzeltmeler
+
+**Kritik Hata Düzeltmeleri:**
+- `m3_sensors/sensors.py`: `NavData` alanı `center_cm` yerine **`front_cm`** olarak yeniden adlandırıldı. Eski test/doküman uyumluluğu için `center_cm` property'si backward-compat alias olarak eklendi.
+- `m3_sensors/sensors.py`: `init_sensors()` içindeki `config.TRIG_CENTER` / `config.ECHO_CENTER` referansları **`config.TRIG_FRONT` / `config.ECHO_FRONT`** olarak düzeltildi (önceden RPi'de `AttributeError` veriyordu).
+
+**Engel Kaçınma İyileştirmesi:**
+- `m5_navigation/obstacle.py`: `_side_pass()` fonksiyonuna **`direction` parametresi** eklendi. Engel yönlü sensör dinamik olarak seçiliyor (`RIGHT` bypass → `left_cm`, `LEFT` bypass → `right_cm`). Önceden sadece sol sensör sabit olarak kullanılıyordu.
+- `m5_navigation/obstacle.py`: Docstring güncellendi — artık "obstacle-facing side sensor" ifadesi kullanılıyor.
+
+**Test Düzeltmeleri:**
+- `m2_motor/tests/test_motor.py`: Testler `MOCK_MODE` kontrolü ile yeniden yazıldı. `RPi.GPIO` olmadan da anlamlı çalışıyor. Batarya testlerinde mock_voltage doğrudan set ediliyor.
+- `m3_sensors/tests/test_sensors.py`: Aynı şekilde `MOCK_MODE` kontrolü eklendi. `_read_mcp3208` doğru metod adı ile mock'lanıyor. `front_cm` ve `center_cm` alias testi eklendi.
+
+**main.py Güncellemesi:**
+- M4 vision `init()` çağrısı eklendi. Başlatma sırası artık: `M7 → M2 → M3 → M4`.
+
+**Config:**
+- `DATA_DIR` varsayılanı `/data` yerine repo-içi `runtime_data/` olarak değiştirildi (`SEEFIRE_DATA_DIR` ortam değişkeni ile override edilebilir). Mock modda yazılabilir dizin garantisi.
+
+**Dokümantasyon:**
+- `CLAUDE.md` tamamen yeniden yazıldı ve repo için **current architecture note** görevi görüyor. Modül durumları, runtime gerçeği, sensor/motion model, mock mode ve source-of-truth önceliği tanımlanıyor.
+- `navigation_modulu.md` eski Arduino / wall-following / occupancy-grid taslağından arındırılıp mevcut Raspberry Pi tabanlı sector-traverse mantığına göre güncellendi.
+- `docs/nelerdegisti.md` rapor ile mevcut kod arasındaki tüm farkları kapsayacak şekilde yeniden yazıldı.
+
+**Header Dosyaları:**
+- `m2_motor.h`: 2S batarya değerleri (8.4V/6.8V/6.4V), encoder pin'leri (6, 21), mesafe bazlı API fonksiyonları eklendi. 3S referanslar kaldırıldı.
+- `m3_sensors.h`: 3 sensör (`TRIG/ECHO_FRONT` eklendi), `M3_ADC_MAX=4095`, `M3_ULTRASONIC_COUNT=3`, `m3_nav_data_t` artık `front_cm` içeriyor, `m3_get_navigation_sensors_filtered` eklendi.
+- `m4_vision.h`: YOLO pipeline referansları kaldırıldı. Sadece `init/close/capture_frame/determine_turn_direction`. `m4_turn_hint_t` enum eklendi.
+- `m5_navigation.h`: Wall-following ve occupancy grid tamamen kaldırıldı. Waypoint/sector traversal API (`m5_run_navigation`, `m5_handle_obstacle`, `m5_verify_start_position`).
+- `m6_decision.h`: EXPLORE/PATROL yerine `M6_STATE_NAVIGATE`. `M6_BATTERY_LOW_V=6.8` config.py ile uyumlu. Placeholder notu eklendi.
+- `m7_logging.h`: `m7_event_t` Python dataclass ile uyumlu hale getirildi. `m7_save_snapshot` signature güncellendi.
+
+**README Dosyaları:**
+- Tüm modül README'leri (`m2_motor`, `m3_sensors`, `m4_vision`, `m5_navigation`, `m6_decision`, `m7_logging`) sadeleştirildi — eski C-style örnekler kaldırıldı, güncel Python API'yi yansıtıyor.
+
+**`m2_motor/__init__.py`:**
+- `set_total_distance_cm` fonksiyonu `__all__` listesine eklendi.
+
+### Doğrulama
+- `python3 -m pytest m2_motor/tests/test_motor.py m3_sensors/tests/test_sensors.py -v` → **6/6 PASSED**
+- Tüm modüller mock modda hatasız import ediliyor.
+- `test_mocks.py` güncel `front_cm` alanını doğru yazdırıyor.
+
+### Source of Truth Sırası
+
+Tutarsızlık durumunda şu sıralama geçerli kabul edilmelidir:
+1. Python implementasyonu
+2. `config.py`
+3. `CLAUDE.md`
+4. `docs/nelerdegisti.md`
+5. tarihsel raporlar ve eski roadmap belgeleri

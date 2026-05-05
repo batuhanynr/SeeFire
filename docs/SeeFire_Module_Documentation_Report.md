@@ -1,3 +1,8 @@
+> Historical baseline note:
+> This file is the archived Assignment 3 design report from April 2026.
+> It does **not** describe the current repository one-to-one anymore.
+> For the live codebase, use `CLAUDE.md` and `docs/nelerdegisti.md` as the current architecture references.
+
 SeeFire
 Autonomous Indoor Fire Detection Robot
 ASSIGNMENT 3
@@ -887,4 +892,3 @@ M3 Remove m3_get_imu_heading; remove m3_nav_data_t IMU field MPU6050 dropped fro
 M5 Remove imu_heading_deg argument from m5_update_navigation Consistent with M3 change
 M6 Add configurable alarm-reset timeout constant Currently hard-coded
 END OF DOCUMENT
-
