@@ -1,85 +1,185 @@
 """
-M2 Motor Control Implementation
-Follows the architecture rules defined in m2_motor.h
+M2 Motor Control & Power Implementation
+Handles physical actuators: L298N driver, Alarm LED, Buzzer, and Battery Voltage.
+Supports Mock Mode for development without physical robot.
 """
-import RPi.GPIO as GPIO
 import config
 import logging
 import time
 
 logger = logging.getLogger(__name__)
 
+# Try to import RPi.GPIO (Mock if on macOS/Windows)
+try:
+    import RPi.GPIO as GPIO
+    MOCK_MODE = False
+except ImportError:
+    logger.warning("RPi.GPIO not found. M2 will run in MOCK MODE. Hardware actions will just print to console.")
+    MOCK_MODE = True
+
+
 class MotorM2:
     def __init__(self):
         self._initialized = False
+        self.pwm_a = None
+        self.pwm_b = None
+        self.mock_battery_v = 7.4 # Nominal dummy battery 
         
-    def init_motors(self) -> bool:
+    def init_hardware(self) -> bool:
+        if MOCK_MODE:
+            logger.info("[MOCK] Hardware initialized.")
+            self._initialized = True
+            return True
+
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
         
+        # Setup Pins
         pins = [config.MOTOR_IN1, config.MOTOR_IN2, 
                 config.MOTOR_IN3, config.MOTOR_IN4,
-                config.MOTOR_ENA, config.MOTOR_ENB]
+                config.MOTOR_ENA, config.MOTOR_ENB,
+                config.LED_PIN, config.BUZZER_PIN]
                 
         for pin in pins:
             GPIO.setup(pin, GPIO.OUT)
             GPIO.output(pin, GPIO.LOW)
             
-        # L298N PWM initialization (Placeholder for full PWM wrapper)
-        self.pwm_a = GPIO.PWM(config.MOTOR_ENA, 100) 
-        self.pwm_b = GPIO.PWM(config.MOTOR_ENB, 100)
+        # L298N PWM initialization (~1 kHz)
+        self.pwm_a = GPIO.PWM(config.MOTOR_ENA, 1000) 
+        self.pwm_b = GPIO.PWM(config.MOTOR_ENB, 1000)
         self.pwm_a.start(0)
         self.pwm_b.start(0)
         
         self._initialized = True
-        logger.info("M2_Motor configured.")
+        logger.info("M2 Hardware configured successfully on RPi.")
         return True
 
-    def drive(self, left_speed: int, right_speed: int) -> None:
-        """Simplistic motor drive wrapper."""
+    def motor_drive(self, direction: str, speed: int) -> None:
+        """
+        Drives the robot. Direction can be "forward" or "backward".
+        Speed is 0-100 percentage.
+        """
+        speed = max(0, min(100, speed)) # clamp 0-100
+
+        if MOCK_MODE:
+            logger.debug(f"[MOCK] motor_drive: {direction} at {speed}% speed")
+            return
+
+        if not self._initialized:
+            return
+
+        if direction == "forward":
+            self._set_left_motor(speed)
+            self._set_right_motor(speed)
+        elif direction == "backward":
+            self._set_left_motor(-speed)
+            self._set_right_motor(-speed)
+        else:
+            self.motor_stop()
+
+    def motor_turn(self, angle: float, speed: int) -> None:
+        """
+        Turns the robot right for positive angle, left for negative angle.
+        """
+        speed = max(0, min(100, speed))
+        
+        if MOCK_MODE:
+            logger.debug(f"[MOCK] motor_turn: angle {angle} at {speed}% speed")
+            return
+
+        if not self._initialized:
+            return
+
+        # Simple differential drive for turning
+        if angle > 0: # Turn Right
+            self._set_left_motor(speed)
+            self._set_right_motor(-speed)
+        elif angle < 0: # Turn Left
+            self._set_left_motor(-speed)
+            self._set_right_motor(speed)
+        else:
+            self.motor_stop()
+
+    def motor_stop(self) -> None:
+        if MOCK_MODE:
+            logger.debug("[MOCK] motor_stop")
+            return
+
+        if self._initialized:
+            self._set_left_motor(0)
+            self._set_right_motor(0)
+
+    def _set_left_motor(self, speed: int):
+        if speed > 0:
+            GPIO.output(config.MOTOR_IN1, GPIO.HIGH)
+            GPIO.output(config.MOTOR_IN2, GPIO.LOW)
+            self.pwm_a.ChangeDutyCycle(speed)
+        elif speed < 0:
+            GPIO.output(config.MOTOR_IN1, GPIO.LOW)
+            GPIO.output(config.MOTOR_IN2, GPIO.HIGH)
+            self.pwm_a.ChangeDutyCycle(-speed)
+        else:
+            GPIO.output(config.MOTOR_IN1, GPIO.LOW)
+            GPIO.output(config.MOTOR_IN2, GPIO.LOW)
+            self.pwm_a.ChangeDutyCycle(0)
+
+    def _set_right_motor(self, speed: int):
+        if speed > 0:
+            GPIO.output(config.MOTOR_IN3, GPIO.HIGH)
+            GPIO.output(config.MOTOR_IN4, GPIO.LOW)
+            self.pwm_b.ChangeDutyCycle(speed)
+        elif speed < 0:
+            GPIO.output(config.MOTOR_IN3, GPIO.LOW)
+            GPIO.output(config.MOTOR_IN4, GPIO.HIGH)
+            self.pwm_b.ChangeDutyCycle(-speed)
+        else:
+            GPIO.output(config.MOTOR_IN3, GPIO.LOW)
+            GPIO.output(config.MOTOR_IN4, GPIO.LOW)
+            self.pwm_b.ChangeDutyCycle(0)
+
+    def set_alarm(self, led: bool, buzzer: bool) -> None:
+        """
+        Activates or deactivates the alarm outputs.
+        """
+        if MOCK_MODE:
+            logger.debug(f"[MOCK] set_alarm: LED={led}, BUZZER={buzzer}")
+            return
+
         if not self._initialized:
             return
             
-        def set_motor(in1, in2, pwm, speed):
-            # Clamp speed perfectly -100 to 100
-            speed = max(-100, min(100, speed))
-            if speed > 0:
-                GPIO.output(in1, GPIO.HIGH)
-                GPIO.output(in2, GPIO.LOW)
-                pwm.ChangeDutyCycle(speed)
-            elif speed < 0:
-                GPIO.output(in1, GPIO.LOW)
-                GPIO.output(in2, GPIO.HIGH)
-                pwm.ChangeDutyCycle(-speed)
-            else:
-                GPIO.output(in1, GPIO.LOW)
-                GPIO.output(in2, GPIO.LOW)
-                pwm.ChangeDutyCycle(0)
-                
-        set_motor(config.MOTOR_IN1, config.MOTOR_IN2, self.pwm_a, left_speed)
-        set_motor(config.MOTOR_IN3, config.MOTOR_IN4, self.pwm_b, right_speed)
+        GPIO.output(config.LED_PIN, GPIO.HIGH if led else GPIO.LOW)
+        GPIO.output(config.BUZZER_PIN, GPIO.HIGH if buzzer else GPIO.LOW)
 
-    def emergency_stop(self) -> None:
-        if self._initialized:
-            self.drive(0, 0)
-            logger.info("Motor Emergency Stopped.")
+    def get_battery_voltage(self) -> float:
+        """
+        Reads the battery voltage via MCP3208 ADC.
+        Returns the real voltage as a float.
+        """
+        if MOCK_MODE:
+            # Simulate battery drain dynamically over time
+            self.mock_battery_v -= 0.001 
+            if self.mock_battery_v < config.BATTERY_CRIT_V:
+                self.mock_battery_v = config.BATTERY_MAX_V # wrap around for testing
+            return round(self.mock_battery_v, 2)
 
-    def _read_battery_voltage_dummy(self) -> float:
-        # In a real setup, connect battery voltage divider to MCP3008 ADC
-        return 7.4 # Nominal 2S Lipo
+        # NOTE: When M3 is ready, we pull SPI from it or write an isolated SPI read here.
+        # For now, we assume a placeholder function or M3 integration.
+        # This translates the ADC raw value to Analog Voltage, then calculates inverse of Voltage Divider.
+        adc_value = 0 # TODO: Hook into SPI ADC reading channel 'config.BATTERY_ADC_CH'
+        adc_ref_voltage = 3.3
+        adc_max = 4095.0 # 12-bit ADC
         
-    def check_battery(self) -> int:
-        v = self._read_battery_voltage_dummy()
-        if v < 6.6: # config.py or M2_BATTERY_CRIT_V 
-            logger.warning(f"CRITICAL BATTERY: {v}V")
-            return 2
-        if v < 7.2: # M2_BATTERY_LOW_V
-            logger.warning(f"LOW BATTERY: {v}V")
-            return 1
-        return 0
+        pin_voltage = (adc_value / adc_max) * adc_ref_voltage
+        real_voltage = pin_voltage * ((config.VDIV_R1 + config.VDIV_R2) / config.VDIV_R2)
+        
+        return real_voltage
 
+# Provide the public API as module-level functions
 _instance = MotorM2()
-init_motors = _instance.init_motors
-drive = _instance.drive
-emergency_stop = _instance.emergency_stop
-check_battery = _instance.check_battery
+init_hardware = _instance.init_hardware
+motor_drive = _instance.motor_drive
+motor_turn = _instance.motor_turn
+motor_stop = _instance.motor_stop
+set_alarm = _instance.set_alarm
+get_battery_voltage = _instance.get_battery_voltage
