@@ -20,9 +20,13 @@ MOTOR_ENA, MOTOR_ENB = 12, 13
 # Sensor Integration (M3)
 TRIG_LEFT, ECHO_LEFT = 23, 24
 TRIG_RIGHT, ECHO_RIGHT = 25, 8
-TRIG_CENTER, ECHO_CENTER = 16, 20 # 3rd Ultrasonic Sensor Added
+TRIG_FRONT, ECHO_FRONT = 16, 20  # 3rd Ultrasonic Sensor (front)
 MQ2_CS_PIN = 5
 MQ2_ADC_CH = 0
+
+# Wheel Encoders (single-channel pulse counting; direction inferred from motor command)
+ENCODER_LEFT_PIN = 6
+ENCODER_RIGHT_PIN = 21
 
 # Alarm Outputs (M2/M6)
 LED_PIN = 26
@@ -40,11 +44,39 @@ VISION_CONF_THRESHOLD = 0.5
 FUSION_ALARM_THRESH = 0.7
 FUSION_CLEAR_THRESH = 0.4
 
-# --- Navigation ---
+# --- Navigation (waypoint-based, south-to-north traversal) ---
 
-OBSTACLE_DIST_CM = 20
-GRID_RESOLUTION_M = 0.10
-WALL_FOLLOW_DIST_CM = 30
+# Route as list of (target_north_cm, sector_id). Distance is cumulative from start.
+WAYPOINTS = [
+    (100, 1),
+    (200, 2),
+    (300, 3),
+]
+
+# Forward-step granularity for the main loop (smaller = finer midpoint detection)
+STEP_DISTANCE_CM = 5.0
+# Side-step granularity during obstacle bypass
+SIDE_STEP_CM = 5.0
+
+# Obstacle thresholds (front sensor)
+OBSTACLE_THRESHOLD_CM = 20.0   # below this → obstacle, trigger avoidance
+OBSTACLE_CLEAR_CM     = 40.0   # left sensor reading above this during bypass → obstacle ended
+
+# Start position reference (left/right wall distances at south origin)
+START_LEFT_CM  = 30.0
+START_RIGHT_CM = 30.0
+POSITION_TOLERANCE_CM = 5.0
+FINE_TUNE_STEP_CM     = 2.0
+
+# Encoder calibration
+ENCODER_TICKS_PER_CM = 20.0
+
+# Drive parameters
+DRIVE_SPEED = 60   # PWM duty cycle 0-100 for forward
+TURN_SPEED  = 60   # PWM duty cycle 0-100 for in-place turn
+# Time-based fallback for distance/turn when no encoder is wired (mock or hardware-absent)
+MOCK_CM_PER_SEC      = 20.0  # nominal forward speed at DRIVE_SPEED duty
+MOCK_TURN_90_SECONDS = 0.8   # nominal time for 90° in-place turn at TURN_SPEED
 
 # --- Battery Characteristics (2S Li-ion) ---
 BATTERY_MAX_V     = 8.4   # Full charge
@@ -73,6 +105,9 @@ def validate_gpio_pins() -> None:
         "MOTOR_ENA": MOTOR_ENA, "MOTOR_ENB": MOTOR_ENB,
         "TRIG_LEFT": TRIG_LEFT, "ECHO_LEFT": ECHO_LEFT,
         "TRIG_RIGHT": TRIG_RIGHT, "ECHO_RIGHT": ECHO_RIGHT,
+        "TRIG_FRONT": TRIG_FRONT, "ECHO_FRONT": ECHO_FRONT,
+        "ENCODER_LEFT_PIN": ENCODER_LEFT_PIN,
+        "ENCODER_RIGHT_PIN": ENCODER_RIGHT_PIN,
         "MQ2_CS_PIN": MQ2_CS_PIN,
         "LED_PIN": LED_PIN, "BUZZER_PIN": BUZZER_PIN,
     }

@@ -5,6 +5,7 @@ Uses SPI (MCP3208) for MQ-2, I2C for MLX90614, and GPIO for HC-SR04.
 Supports Mock Mode for development without physical sensors.
 """
 from dataclasses import dataclass
+from statistics import median
 import time
 import logging
 
@@ -154,6 +155,21 @@ class SensorsM3:
         r = self._read_ultrasonic(config.TRIG_RIGHT, config.ECHO_RIGHT)
         return NavData(left_cm=l, center_cm=c, right_cm=r, timestamp=time.time())
 
+    def get_navigation_sensors_filtered(self, samples: int = 3) -> NavData:
+        """Median-filtered nav reading. Robust against single-shot noise/reflections."""
+        lefts, rights, centers = [], [], []
+        for _ in range(samples):
+            lefts.append(self._read_ultrasonic(config.TRIG_LEFT, config.ECHO_LEFT))
+            rights.append(self._read_ultrasonic(config.TRIG_RIGHT, config.ECHO_RIGHT))
+            centers.append(self._read_ultrasonic(config.TRIG_CENTER, config.ECHO_CENTER))
+            time.sleep(0.02)
+        return NavData(
+            left_cm=median(lefts),
+            center_cm=median(centers),
+            right_cm=median(rights),
+            timestamp=time.time(),
+        )
+
     def read_battery_adc(self) -> int:
         """Expose Battery ADC channel for M2"""
         return self._read_mcp3208(config.BATTERY_ADC_CH)
@@ -169,5 +185,6 @@ _instance = SensorsM3()
 init_sensors = _instance.init_sensors
 get_fusion_sensors = _instance.get_fusion_sensors
 get_navigation_sensors = _instance.get_navigation_sensors
+get_navigation_sensors_filtered = _instance.get_navigation_sensors_filtered
 read_battery_adc = _instance.read_battery_adc
 cleanup = _instance.cleanup

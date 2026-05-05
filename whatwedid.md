@@ -39,3 +39,64 @@ Bu bölümde, proje dokümantasyonu ile fiziksel gerçeklik arasındaki uyuşmaz
   - 8.4V Şarj Adaptörü ve Rocker Switch.
 
 *(Not: Rapor PDF'leri, Appendix A GPIO Pin listesi, Malzeme Tablosu, Malzeme Riskleri ve config sabit limitleri de bu yeni güncellemeler doğrultusunda güncellenmiştir.)*
+
+---
+
+## Tarih: 5 Mayıs 2026 — Navigation Mimarisi Yenilemesi
+**Geliştirici:** Alperen & Claude
+
+### Karar
+`navigation_modulu.md` dokümanı projeye benimsendi. M5 navigation, **wall-following + occupancy grid** yaklaşımından **waypoint-driven south→north sektör traversali** modeline geçirildi. Encoder birincil konum kaynağı; HC-SR04 yan sensörler yalnızca başlangıç doğrulaması ve engel sonrası lateral fine-tune için kullanılıyor. Engelde dönüş yönü kameradan piksel oranlamasıyla belirleniyor (yedek: ultrasonic). Arduino kullanılmıyor — tüm I/O Raspberry Pi GPIO üzerinden, encoder pulse'ları GPIO interrupt ile sayılıyor. Kod dili tamamen İngilizce.
+
+### Dosya Bazında Değişiklikler
+
+**`config.py`**
+- Kaldırıldı: `OBSTACLE_DIST_CM`, `WALL_FOLLOW_DIST_CM`, `GRID_RESOLUTION_M` (eski navigasyon modeline ait).
+- `TRIG_CENTER/ECHO_CENTER` → `TRIG_FRONT/ECHO_FRONT` olarak yeniden adlandırıldı (anlamsal netlik).
+- Eklendi: `ENCODER_LEFT_PIN=6`, `ENCODER_RIGHT_PIN=21`, `ENCODER_TICKS_PER_CM`.
+- Eklendi: `WAYPOINTS = [(100,1),(200,2),(300,3)]`, `STEP_DISTANCE_CM`, `SIDE_STEP_CM`.
+- Eklendi: `OBSTACLE_THRESHOLD_CM`, `OBSTACLE_CLEAR_CM`.
+- Eklendi: `START_LEFT_CM`, `START_RIGHT_CM`, `POSITION_TOLERANCE_CM`, `FINE_TUNE_STEP_CM`.
+- Eklendi: `DRIVE_SPEED`, `TURN_SPEED`, `MOCK_CM_PER_SEC`, `MOCK_TURN_90_SECONDS` (mock-mode time-based fallback).
+- `validate_gpio_pins()` yeni pin isimlerini kapsayacak şekilde güncellendi.
+
+**`m2_motor/motor.py`**
+- Encoder pulse-counting: `_on_left_tick` / `_on_right_tick` rising-edge interrupt callback'leri.
+- Yeni distance-based API: `drive_distance_cm(cm)`, `turn_left_90()`, `turn_right_90()`, `stop()`, `total_distance_cm` property, `set_total_distance_cm(value)`.
+- Mock modda encoder yerine elapsed-time × `MOCK_CM_PER_SEC` ile mesafe simülasyonu.
+- Eski API (`motor_drive`, `motor_turn`, `motor_stop`, `set_alarm`, `get_battery_voltage`) M6 uyumluluğu için olduğu gibi korundu.
+
+**`m2_motor/__init__.py`**
+- Yeni public sembolleri (`drive_distance_cm`, `turn_*_90`, `stop`, `get_total_distance_cm`, `set_total_distance_cm`) re-export ediyor.
+
+**`m3_sensors/sensors.py`**
+- `init_sensors`'a 3. ultrasonik (front) GPIO setup eklendi.
+- `NavData` artık `front_cm` alanını içeriyor (M5 engel tespiti için).
+- `get_navigation_sensors_filtered(samples=3)`: 3 okumanın per-eksen medyanı — gürültü ve yansıma artefaktlarına karşı.
+
+**`m4_vision/vision.py`** (placeholder yerine gerçek kod)
+- `VisionM4.init()` (camera open + warmup), `capture_frame()`, `close()`.
+- `determine_turn_direction(frame=None) -> "LEFT"|"RIGHT"|None`: Canny + lower-half ROI + soldan/sağdan boş piksel sayımı. OpenCV yoksa `None` döner (caller ultrasonic'e düşer).
+
+**`m4_vision/__init__.py`**
+- Yeni fonksiyonları re-export ediyor.
+
+**`m5_navigation/`** (placeholder'dan tam implementasyon)
+- `navigation.py`: `NavigationController` — `start()` (start position verify), `run(waypoints=None)` (sektör döngüsü). `_check_midpoint` engel kaçınmaya callback olarak veriliyor → midpoint snapshot bypass sırasında bile asla atlanmıyor.
+- `obstacle.py`: `ObstacleAvoidance.avoid(sector_id)` — kamera/ultrasonic karar, 90° dönüş, sol-sensör gözetiminde yan-geçiş, encoder tabanlı geri dönüş, lateral fine-tune. Bypass öncesi north-distance snapshot alınıp sonra geri yazılıyor (yan hareketler kuzey-ilerleyişi olarak sayılmasın diye).
+- `position.py`: `PositionVerifier` — `verify_start()` (RuntimeError raise), `verify_and_correct()` (FINE_TUNE_STEP_CM yan adım).
+- `__init__.py`: üç sınıfı public yapıyor.
+
+**`CLAUDE.md`**
+- Module Overview tablosunda M2/M3/M4/M5 satırları yeni sorumlulukları yansıtacak şekilde güncellendi.
+- Critical Hardware Constraints: MPU6050 drift maddesi (artık IMU yok) → encoder slip + lateral fine-tune ile değiştirildi.
+
+### Doğrulama
+- Tüm modüller mock modda hatasız import oluyor.
+- End-to-end mock dry-run: 2-waypoint rotada 4 snapshot (2 midpoint + 2 waypoint) tetiklendi, 40 cm encoder okuması alındı.
+- Engel-yolu mock dry-run: front sensör threshold'u zorlandığında `RIGHT` yönüne bypass, 10 cm yan-geçiş sonrası clear, lateral fine-tune çalıştı.
+
+### Eski Mimariden Geri Kalan İş
+- M6 decision FSM hâlâ EXPLORE/PATROL state'lerine sahip; bunların M5 `NavigationController.run()` çağrısına delege olması gerekiyor (sonraki PR).
+- `ENCODER_TICKS_PER_CM` ve `MOCK_CM_PER_SEC` fiziksel robotla kalibre edilmeli.
+- Dokümanlardaki (`docs/SeeFire_Interface_report.md`, `docs/SeeFire_Module_Documentation_Report.md`) eski `OBSTACLE_DIST_CM` / `WALL_FOLLOW_DIST_CM` / `GRID_RESOLUTION_M` referansları henüz güncellenmedi — sadece `config.py` temizlendi.
