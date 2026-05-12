@@ -41,3 +41,23 @@ def test_battery_voltage_can_drop_to_critical_range():
     with patch('m3_sensors.sensors.read_battery_adc', return_value=1770):  # ~6.5V
         voltage = motor.get_battery_voltage()
         assert voltage <= 6.6
+
+def test_drive_distance_logic():
+    """Verify that driving 50cm updates total distance and triggers stop."""
+    m = motor.MotorM2()
+    m.set_total_distance_cm(0)
+    
+    # In MOCK_MODE, this will use MOCK_CM_PER_SEC to simulate time
+    m.drive_distance_cm(50)
+    
+    assert m.total_distance_cm == 50.0
+    assert m._direction_sign == 0  # Should be stopped
+
+def test_turn_timing():
+    """Verify turns complete and leave motor stopped."""
+    m = motor.MotorM2()
+    m.turn_left_90()
+    assert m._direction_sign == 0
+    
+    m.turn_right_90()
+    assert m._direction_sign == 0

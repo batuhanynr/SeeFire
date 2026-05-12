@@ -21,6 +21,16 @@ except ImportError:
 
 
 class MotorM2:
+    """
+    Motor control class for SeeFire robot.
+    
+    Movement Pin Logic (L298N):
+    - Forward:  IN1=HIGH, IN2=LOW  (Left)  | IN3=HIGH, IN4=LOW  (Right)
+    - Backward: IN1=LOW,  IN2=HIGH (Left)  | IN3=LOW,  IN4=HIGH (Right)
+    - Turn Right: IN1=HIGH, IN2=LOW (Left) | IN3=LOW,  IN4=HIGH (Right)
+    - Turn Left:  IN1=LOW,  IN2=HIGH (Left) | IN3=HIGH, IN4=LOW  (Right)
+    - Stop:     All LOW
+    """
     def __init__(self):
         self._initialized = False
         self.pwm_a = None
