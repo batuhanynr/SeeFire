@@ -29,19 +29,20 @@ _conn: sqlite3.Connection | None = None
 def init() -> None:
     global _conn
     os.makedirs(os.path.dirname(config.SQLITE_DB_PATH) or ".", exist_ok=True)
-    _conn = sqlite3.connect(config.SQLITE_DB_PATH, check_same_thread=False)
-    _conn.execute("PRAGMA journal_mode=WAL")
-    _conn.execute("""
-        CREATE TABLE IF NOT EXISTS events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT NOT NULL,
-            event_type TEXT NOT NULL,
-            fusion_score REAL,
-            sensor_data TEXT,
-            snapshot_path TEXT
-        )
-    """)
-    _conn.commit()
+    with _lock:
+        _conn = sqlite3.connect(config.SQLITE_DB_PATH, check_same_thread=False)
+        _conn.execute("PRAGMA journal_mode=WAL")
+        _conn.execute("""
+            CREATE TABLE IF NOT EXISTS events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                fusion_score REAL,
+                sensor_data TEXT,
+                snapshot_path TEXT
+            )
+        """)
+        _conn.commit()
     logger.info("SQLite DB ready at %s (WAL mode)", config.SQLITE_DB_PATH)
 
 
