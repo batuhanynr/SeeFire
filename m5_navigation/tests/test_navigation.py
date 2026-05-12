@@ -72,3 +72,35 @@ def test_avoidance_maneuver_flow(mock_drive, mock_turn, mock_set_dist, mock_get_
             # Verify fine-tuning was called
             pv.verify_and_correct.assert_called_once()
 
+def test_full_mission_snapshot_count():
+    """Verify that a 3-sector mission triggers exactly 6 snapshots."""
+    from m5_navigation.navigation import NavigationController
+    
+    # Mock waypoints to be 3 sectors
+    mock_reading = MagicMock()
+    mock_reading.left_cm = config.START_LEFT_CM
+    mock_reading.right_cm = config.START_RIGHT_CM
+    
+    with patch('config.WAYPOINTS', [(100, 1), (200, 2), (300, 3)]), \
+         patch('m2_motor.motor.MotorM2.motor_drive'), \
+         patch('m3_sensors.get_navigation_sensors_filtered', return_value=mock_reading), \
+         patch('m2_motor.motor.get_total_distance_cm') as mock_dist:
+        
+        callback = MagicMock()
+        nav = NavigationController(snapshot_callback=callback)
+        
+        # Simulate distance increments to trigger midpoints and waypoints
+        # The NavigationController loop uses config.STEP_DISTANCE_CM (5cm)
+        # We need to mock the distance to grow from 0 to 300
+        mock_dist.side_effect = list(range(0, 310, 5))
+        
+        nav.run()
+        
+        # Expected: 3 sectors * 2 snapshots each (mid + waypoint) = 6
+        assert callback.call_count == 6
+        
+        # Verify call labels (NavigationController uses descriptive labels)
+        labels = [call.args[0] for call in callback.call_args_list]
+        assert any("midpoint" in l for l in labels)
+        assert any("waypoint" in l for l in labels)
+

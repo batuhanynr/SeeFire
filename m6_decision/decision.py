@@ -41,10 +41,22 @@ class DecisionEngine:
         # 1. Capture data
         frame = m4_vision.capture_frame()
         sensors = m3_sensors.get_fusion_sensors()
+        fire_conf = m4_vision.get_fire_confidence()
 
-        # 2. Logic to update global fusion score (simplified for now)
-        # In Phase 2, this will be more complex.
-        self.fusion_score = 0.1  # Placeholder
+        # 2. Logic to update global fusion score
+        # Use fire confidence from YOLO if available, otherwise mock detection on waypoints
+        vision_conf = max(fire_conf, 0.6 if label == "WAYPOINT" else 0.1)
+        
+        self.fusion_score = self._calculate_fusion_score(
+            vision_conf=vision_conf,
+            smoke_val=float(sensors.smoke_level),
+            ir_temp=float(sensors.ir_temp)
+        )
+        
+        # Check for state transition trigger
+        if self.fusion_score >= config.FUSION_ALARM_THRESH and self.state == RobotState.NAVIGATE:
+            logger.warning("[DECISION] Fusion score %.2f exceeds alarm threshold!", self.fusion_score)
+            self.state = RobotState.VERIFY
 
         # 3. M7 Logging integration
         event = m7_logging.m7_event_t(
@@ -70,6 +82,23 @@ class DecisionEngine:
                 # currently doesn't expose a 'update_event_path' method.
                 logger.info("Snapshot saved to %s", path)
 
+    def _calculate_fusion_score(self, vision_conf: float, smoke_val: float, ir_temp: float) -> float:
+        """
+        Calculates the risk score based on weighted sensor inputs.
+        Weights: Vision=0.5, Smoke=0.3, IR=0.2 (from config)
+        """
+        # Normalize smoke (4095 is max for 12-bit ADC)
+        smoke_score = min(1.0, smoke_val / 4095.0)
+        
+        # Normalize IR (Threshold maps to 1.0)
+        ir_score = min(1.0, ir_temp / config.IR_TEMP_THRESHOLD)
+        
+        score = (config.W_VISION * vision_conf) + \
+                (config.W_SMOKE * smoke_score) + \
+                (config.W_IR * ir_score)
+        
+        return round(float(score), 2)
+
     def start(self):
         logger.info("Decision Engine (FSM) started in state: %s", self.state)
         # Main State Machine Loop
@@ -82,26 +111,50 @@ class DecisionEngine:
 
     def _handle_state(self):
         if self.state == RobotState.INIT:
+            logger.info("[FSM] Initializing systems...")
             self.state = RobotState.NAVIGATE
 
         elif self.state == RobotState.NAVIGATE:
             logger.info("[DECISION] Starting navigation mission...")
+            # Navigation is handled by NavigationController
             try:
-                # This call blocks until navigation is complete or fails
+                # We start navigation. During navigation, _on_snapshot will
+                # update self.fusion_score based on periodic sensor checks.
                 self.nav.run()
-                self.state = RobotState.STOP
+                
+                # If navigation completes without ALARM triggering
+                if self.state == RobotState.NAVIGATE:
+                    self.state = RobotState.STOP
+                    
             except Exception as e:
                 logger.error("[DECISION] Navigation failed: %s", e)
                 self.state = RobotState.STOP
 
         elif self.state == RobotState.VERIFY:
-            # Phase 2: High-frequency verification logic
-            pass
+            logger.info("[FSM] High risk detected (score=%.2f). Verifying threat...", self.fusion_score)
+            # Stop navigation/movement to focus on verification
+            motor.motor_stop()
+            
+            # Wait 2 seconds to see if score remains high (mock verification)
+            time.sleep(2)
+            if self.fusion_score >= config.FUSION_ALARM_THRESH:
+                self.state = RobotState.ALARM
+            else:
+                logger.info("[FSM] Threat suspicious but not confirmed (score=%.2f). Resuming.", self.fusion_score)
+                self.state = RobotState.NAVIGATE
 
         elif self.state == RobotState.ALARM:
+            logger.error("[FSM] !!! FIRE ALARM ACTIVE !!! (Score: %.2f)", self.fusion_score)
             motor.set_alarm(led=True, buzzer=True)
+            
+            # Reset only if fusion score drops significantly
+            if self.fusion_score < config.FUSION_CLEAR_THRESH:
+                logger.info("[FSM] Risk cleared (score=%.2f). Resetting alarm.", self.fusion_score)
+                motor.set_alarm(led=False, buzzer=False)
+                self.state = RobotState.NAVIGATE
 
         elif self.state == RobotState.STOP:
+            logger.info("[FSM] Shutdown.")
             motor.motor_stop()
             self._stop_event.set()
 
