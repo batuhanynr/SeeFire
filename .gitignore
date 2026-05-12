@@ -16,6 +16,7 @@ env/
 
 # Runtime/generated project data
 runtime_data/
+demo_data/
 *.db
 *.sqlite
 *.sqlite3
