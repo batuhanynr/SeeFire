@@ -2,6 +2,8 @@ import sys
 import os
 import logging
 
+os.environ.setdefault("SEEFIRE_FORCE_MOCK", "1")
+
 logging.basicConfig(level=logging.DEBUG)
 
 # import modules

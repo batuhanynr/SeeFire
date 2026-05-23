@@ -29,7 +29,7 @@ PIN_ENC_RIGHT = 7   # Sağ enkoder sinyal (RR motoru)
 PIN_TRIG_FRONT = 23   # Ön sensör — tetik
 PIN_ECHO_FRONT = 24   # Ön sensör — yankı (voltaj bölücüden, ~3.18V)
 PIN_TRIG_RIGHT = 25   # Sağ sensör — tetik
-PIN_ECHO_RIGHT = 8    # Sağ sensör — yankı (voltaj bölücüden, ~3.18V)
+PIN_ECHO_RIGHT = 21   # Sağ sensör — yankı (voltaj bölücüden, ~3.18V)
 PIN_TRIG_LEFT  = 20   # Sol sensör — tetik
 PIN_ECHO_LEFT  = 16   # Sol sensör — yankı (voltaj bölücüden, ~3.18V)
 # VCC: 5V  |  TRIG: 3.3V çıkış (Pi direkt)
@@ -88,7 +88,6 @@ PIN_BUZZER = 19   # Aktif buzzer (Pin 35)
 | 21         | GPIO9    | IN    | MCP3008 DOUT (MISO)        | SPI          |
 | 22         | GPIO25   | OUT   | HC-SR04 sağ TRIG           | Dijital      |
 | 23         | GPIO11   | OUT   | MCP3008 CLK (SCLK)         | SPI          |
-| 24         | GPIO8    | IN    | HC-SR04 sağ ECHO (bölücüden)| Dijital     |
 | 25         | —        | GND   | Genel GND                  | —            |
 | 26         | GPIO7    | IN    | Enkoder sağ (RR motoru)    | Dijital      |
 | 29         | GPIO5    | OUT   | MCP3008 CS/SHDN            | SPI (yazılımsal CS) |
@@ -99,6 +98,7 @@ PIN_BUZZER = 19   # Aktif buzzer (Pin 35)
 | 36         | GPIO16   | IN    | HC-SR04 sol ECHO (bölücüden)| Dijital     |
 | 37         | GPIO26   | OUT   | Alarm LED (330Ω seri)      | Dijital      |
 | 38         | GPIO20   | OUT   | HC-SR04 sol TRIG           | Dijital      |
+| 40         | GPIO21   | IN    | HC-SR04 sağ ECHO (bölücüden)| Dijital     |
 
 ### Boşta Kalan GPIO Pinleri
 
@@ -107,7 +107,7 @@ PIN_BUZZER = 19   # Aktif buzzer (Pin 35)
 | 27         | GPIO0    | I²C ID EEPROM — dokunma      |
 | 28         | GPIO1    | I²C ID EEPROM — dokunma      |
 | 31         | GPIO6    | Serbest                      |
-| 40         | GPIO21   | Serbest                      |
+| 24         | GPIO8    | SPI CE0 — sensör için kullanma |
 
 ---
 
@@ -167,7 +167,7 @@ HC-SR04 ECHO (5V)
 | Sensör    | ECHO Kaynağı | GPIO Hedef | Ölçülen Gerilim |
 |-----------|:------------:|:----------:|:---------------:|
 | Ön        | HC-SR04 ön   | GPIO24     | ~3.18V ✓        |
-| Sağ       | HC-SR04 sağ  | GPIO8      | ~3.18V ✓        |
+| Sağ       | HC-SR04 sağ  | GPIO21     | ~3.18V ✓        |
 | Sol       | HC-SR04 sol  | GPIO16     | ~3.18V ✓        |
 
 ---
@@ -215,7 +215,7 @@ HC-SR04 ECHO (5V)
 | VCC     | 5V rayı      | 5V rayı      | 5V rayı      |
 | GND     | GND rayı     | GND rayı     | GND rayı     |
 | TRIG    | GPIO23       | GPIO25       | GPIO20       |
-| ECHO    | GPIO24 (bölücü) | GPIO8 (bölücü) | GPIO16 (bölücü) |
+| ECHO    | GPIO24 (bölücü) | GPIO21 (bölücü) | GPIO16 (bölücü) |
 
 - İki sensörü aynı anda tetikleme — crosstalk olur
 - Timeout: 50ms | Mesafe hesabı: `süre_µs / 58.0` cm
@@ -312,8 +312,8 @@ Kontrol: i2cdetect -y 1
 /dev/spidev0.0
 CLK=GPIO11 | MOSI=GPIO10 | MISO=GPIO9 | CS=GPIO5 (yazılımsal)
 Cihaz: MCP3008 CH0=MQ-2
-Not: GPIO8 (HW CE0) HC-SR04 sağ ECHO için kullanılıyor.
-     spidev başlatırken no_cs=True veya yazılımsal CS kullan.
+Not: GPIO8 (HW CE0) kernel tarafından SPI için tutulabilir.
+     HC-SR04 sağ ECHO GPIO21'e taşındı; spidev no_cs=True + GPIO5 yazılımsal CS kullan.
 ```
 
 ---
@@ -331,7 +331,7 @@ Not: GPIO8 (HW CE0) HC-SR04 sağ ECHO için kullanılıyor.
 | 7 | MCP3008 **çentik yukarı** bakacak şekilde takılmalı — ters takılırsa yanar. |
 | 8 | Tüm GND'ler **tek ortak ray** üzerinde birleşmeli. |
 | 9 | İki HC-SR04'ü **aynı anda tetikleme** — ardışık okuma yap. |
-| 10 | GPIO8 SPI CE0 ile HC-SR04 sağ ECHO çakışıyor — **spidev'i yazılımsal CS ile başlat**. |
+| 10 | GPIO8 SPI CE0 kernel tarafından tutulabilir — sensör ECHO hattında kullanma. Sağ ECHO GPIO21'e taşındı. |
 
 ---
 

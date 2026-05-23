@@ -11,6 +11,7 @@ Mock fallback: if OpenCV/numpy unavailable, returns None so callers fall back
 to ultrasonic-only logic.
 """
 import logging
+import os
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 try:
     import cv2
     import numpy as np
-    CV_AVAILABLE = True
+    CV_AVAILABLE = os.environ.get("SEEFIRE_FORCE_MOCK") != "1"
 except ImportError:
     logger.warning("OpenCV/numpy not available. M4 vision running in MOCK MODE.")
     CV_AVAILABLE = False

@@ -21,15 +21,16 @@ MOTOR_IN1, MOTOR_IN2, MOTOR_IN3, MOTOR_IN4 = 17, 18, 27, 22
 MOTOR_ENA, MOTOR_ENB = 12, 13
 
 # Sensor Integration (M3)
-TRIG_LEFT, ECHO_LEFT = 23, 24
-TRIG_RIGHT, ECHO_RIGHT = 25, 8
-TRIG_FRONT, ECHO_FRONT = 16, 20  # 3rd Ultrasonic Sensor (front)
+# Source of truth: docs/Seefire Wiring Plan.md (BCM numbering)
+TRIG_FRONT, ECHO_FRONT = 23, 24
+TRIG_RIGHT, ECHO_RIGHT = 25, 21
+TRIG_LEFT, ECHO_LEFT = 20, 16
 MQ2_CS_PIN = 5
 MQ2_ADC_CH = 0
 
 # Wheel Encoders (single-channel pulse counting; direction inferred from motor command)
-ENCODER_LEFT_PIN = 6
-ENCODER_RIGHT_PIN = 21
+ENCODER_LEFT_PIN = 4
+ENCODER_RIGHT_PIN = 7
 
 # Alarm Outputs (M2/M6)
 LED_PIN = 26
@@ -37,6 +38,7 @@ BUZZER_PIN = 19
 
 # --- I2C Addresses ---
 
+I2C_BUS = 1
 MLX90614_ADDR = 0x5A
 
 # --- Detection Thresholds ---

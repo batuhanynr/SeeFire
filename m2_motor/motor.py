@@ -6,15 +6,18 @@ Supports Mock Mode for development without physical robot.
 """
 import config
 import logging
+import os
 import threading
 import time
 
 logger = logging.getLogger(__name__)
 
 # Try to import RPi.GPIO (Mock if on macOS/Windows)
+FORCE_MOCK = os.environ.get("SEEFIRE_FORCE_MOCK") == "1"
+
 try:
     import RPi.GPIO as GPIO
-    MOCK_MODE = False
+    MOCK_MODE = FORCE_MOCK
 except ImportError:
     logger.warning("RPi.GPIO not found. M2 will run in MOCK MODE. Hardware actions will just print to console.")
     MOCK_MODE = True
