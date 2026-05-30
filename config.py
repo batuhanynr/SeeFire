@@ -63,7 +63,20 @@ SIDE_STEP_CM = 5.0
 
 # Obstacle thresholds (front sensor)
 OBSTACLE_THRESHOLD_CM = 20.0   # below this → obstacle, trigger avoidance
-OBSTACLE_CLEAR_CM     = 40.0   # left sensor reading above this during bypass → obstacle ended
+
+# Side-pass dynamic clearance: clearance-side sensor must exceed D₀ + delta
+# to declare the obstacle cleared. D₀ is the front reading at detection time.
+OBSTACLE_CLEARANCE_DELTA_CM = 15.0
+
+# During side-pass the new "forward" sensor is `front`. If it drops below this
+# we've hit the perpendicular wall → retreat and try the other side.
+WALL_CLEARANCE_CM = 10.0
+
+# Hard cap on side-pass travel before aborting (per attempt).
+SIDE_PASS_SAFETY_CAP_CM = 200.0
+
+# Hard cap on the forward-pass phase (drive north while obstacle is alongside).
+FORWARD_PASS_SAFETY_CAP_CM = 100.0
 
 # Start position reference (left/right wall distances at south origin)
 START_LEFT_CM  = 30.0
