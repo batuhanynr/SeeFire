@@ -35,10 +35,30 @@ class PositionVerifier:
                     reading.left_cm, reading.right_cm)
 
     def verify_and_correct(self) -> None:
-        """Lateral fine-tune after encoder-driven moves (e.g. obstacle bypass)."""
-        reading = m3_sensors.get_navigation_sensors_filtered()
-        left_err = reading.left_cm - config.START_LEFT_CM
+        """Lateral fine-tune. Called after bypass and at every waypoint.
 
+        Two-sensor sanity gate: the corrected position is only trusted when
+        left + right ≈ expected corridor width. This protects against
+        structural elements (columns, recesses) that make a single-sensor
+        reading misleading. If the sanity gate fails the correction is
+        skipped — the next safe waypoint will retry.
+        """
+        reading = m3_sensors.get_navigation_sensors_filtered()
+
+        expected_width = config.START_LEFT_CM + config.START_RIGHT_CM
+        measured_width = reading.left_cm + reading.right_cm
+        # Allow 2× single-sensor tolerance for the combined width.
+        width_tol = 2.0 * config.POSITION_TOLERANCE_CM
+        if abs(measured_width - expected_width) > width_tol:
+            logger.info(
+                "Lateral correction skipped: corridor width measured %.1f cm "
+                "(expected %.1f ±%.1f). Column or obstacle nearby — trusting "
+                "encoder until next safe waypoint.",
+                measured_width, expected_width, width_tol,
+            )
+            return
+
+        left_err = reading.left_cm - config.START_LEFT_CM
         if abs(left_err) <= config.POSITION_TOLERANCE_CM:
             return
 

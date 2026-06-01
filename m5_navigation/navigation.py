@@ -77,7 +77,10 @@ class NavigationController:
         while m2_motor.get_total_distance_cm() < target_cm:
             self._check_midpoint(sector_id)
 
-            reading = m3_sensors.get_navigation_sensors()
+            # Filtered (median of 3) read: protects D₀ from a single noisy
+            # HC-SR04 reading. A bad spike would otherwise distort the
+            # clearance threshold inside the bypass.
+            reading = m3_sensors.get_navigation_sensors_filtered()
             front = reading.front_cm
 
             if front <= 0:
@@ -89,24 +92,51 @@ class NavigationController:
                 m2_motor.drive_distance_cm(config.STEP_DISTANCE_CM)
             else:
                 logger.info("[OBSTACLE] front=%.1f cm — initiating avoidance.", front)
-                self._obstacle.avoid(sector_id)
+                self._obstacle.avoid(sector_id, reference_distance=front)
 
         # Sector end (waypoint)
         logger.info("[WAYPOINT] Sector %d end.", sector_id)
         self._snapshot(f"sector-{sector_id}-waypoint")
+        # Periodic lateral drift correction: integrates encoder slip and
+        # turn-angle error that accumulate between bypasses.
+        self._position.verify_and_correct()
 
     def _check_midpoint(self, sector_id: int) -> None:
         if self._sector_midpoint_passed:
             return
         if m2_motor.get_total_distance_cm() >= self._sector_midpoint_cm:
-            self._snapshot(f"sector-{sector_id}-midpoint")
+            self._scan_four_directions(f"sector-{sector_id}-midpoint")
             self._sector_midpoint_passed = True
 
     def _snapshot(self, label: str) -> None:
+        """Single-frame capture at current heading. Used at waypoints."""
         m2_motor.stop()
         time.sleep(0.3)
         self._snapshot_callback(label)
         time.sleep(0.2)
+
+    def _scan_four_directions(self, label_prefix: str) -> None:
+        """Stop, capture N/E/S/W frames, return to original heading.
+
+        Triggered at sector midpoints. The robot is guaranteed to be facing
+        north when this is called: midpoints can only be crossed during
+        north-facing driving (either a normal forward step or the bypass
+        forward-pass), and lateral moves roll back the north-progress
+        encoder so they never trigger this check.
+
+        Net rotation is 4 × 90° = 360° → robot ends facing north again, in
+        the same position. Caller can resume whatever it was doing without
+        any pose correction.
+        """
+        m2_motor.stop()
+        time.sleep(0.3)
+        for direction_label in ("N", "E", "S", "W"):
+            full_label = f"{label_prefix}-{direction_label}"
+            logger.info("[SCAN] %s", full_label)
+            self._snapshot_callback(full_label)
+            time.sleep(0.2)
+            m2_motor.turn_right_90()
+            time.sleep(0.1)
 
     @staticmethod
     def _default_snapshot(label: str) -> None:
