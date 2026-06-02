@@ -353,3 +353,60 @@ Bunun için **encoder modeli** değişti: `m2_motor.get_total_distance_cm()` art
 ### Notlar
 - İleride spesifik sütun konumları config'e (örn. `COLUMN_WAYPOINTS = {2, 5}`) eklenebilir. Şu anki yaklaşım haritaya özel veri istemiyor, dinamik sensör kontrolü ile çalışıyor.
 - M5 algoritmik olarak **kapanmaya** yakın. Kalan iş ağırlıklı olarak M6/M7 entegrasyonu ve gerçek robotta kalibrasyon.
+
+---
+
+## Tarih: 2 Haziran 2026 — Git Dal Birleştirme (Branch Unification)
+**Geliştirici:** Bekir Emre Sarıpınar & Claude
+
+### Sorun
+`e5dfa2f` ("feat: implement M6 Decision Engine with FSM") ortak atadan sonra **3 farklı dal** ayrılmıştı. `main` branch'i `origin/main` ile uyumsuz hale gelmişti:
+
+```
+e5dfa2f  ← ortak ata
+  ├── 2055705  → local main                    (VisionM4 threading + DecisionEngine)
+  ├── 715376f → fd3144f                        (Batuhan: sensor test + kablaj dokümanı)
+  │     └── origin/feat/m3_full_test
+  └── 98f1145 → 4eb865c (merge PR#7)           (Alperen: obstacle redesign + simülasyon)
+        └── origin/main
+```
+
+`git pull` çalışmıyordu: local `main` `origin/main`'in 2 commit gerisinde ve 1 commit önündeydi.
+
+### Çözüm Adımları
+
+**1. `unified` branch'i oluşturuldu** — `origin/main` taban alınarak (Alperen'in PR #7'sini içerir):
+```bash
+git checkout -b unified origin/main
+```
+
+**2. `main` branch'i `unified`'a merge edildi** — VisionM4 threading değişiklikleri (`2055705`) getirildi:
+- Tek çakışma: `m5_navigation/tests/test_navigation.py`
+- Çözüm: Alperen'in versiyonu korundu (obstacle API'si tamamen yenilenmişti, eski test'ler uyumsuzdu)
+- Sonuç: 13/13 test geçti
+
+**3. Batuhan'ın branch'i (`origin/feat/m3_full_test`) merge edildi — `unified-batu` branch'i**:
+- Çakışma: sadece `m4_vision/vision.py` (import satırları — `os` + `threading` + `time` hepsi korundu)
+- Auto-merge çalışanlar: `config.py`, `m3_sensors/sensors.py`, `m2_motor/motor.py`, `test_mocks.py`
+- Batuhan'dan gelen yeni dosyalar: `data_sensors_test.py`, `hardware_sensor_check.py`, `interactive_ride_test.py`, `docs/Seefire Wiring Plan.md`, `docs/bugunku_sensor_test_plani.md`
+
+**4. `main` güncellendi** — `unified-batu` `main`'e fast-forward merge edildi:
+```bash
+git checkout main && git merge unified-batu
+git push origin main
+```
+
+**5. Eski dallar temizlendi** — `unified`, `unified-batu` silindi. Sadece `main` kaldı.
+
+### Birleşen Değişiklikler
+
+| Kaynak | İçerik | Dahil |
+|--------|--------|-------|
+| **Alperen** (PR #7) | Obstacle bypass redesign (wall-hit, retreat, forward-pass), 4-yön tarama, simülatör (world/mock/visualizer), dinamik D₀, sütun-uyumlu pozisyon düzeltme, medyan filtreli D₀, 13 test | `unified` tabanı |
+| **VisionM4** (`main`) | VisionM4 threading (`_update_loop`, `capture_frame`), DecisionEngine fusion score + `_on_snapshot` callback, M7 logging testleri | `main` merge |
+| **Batuhan** (`feat/m3_full_test`) | GPIO pin'leri fiziksel kablaja göre düzeltildi, MLX90614 raw SMBus (adafruit bağımlılığı kalktı), SPI chip select manuel kontrol, `SEEFIRE_FORCE_MOCK` env var, donanım test script'leri, kablaj dokümanı | 2. merge |
+
+### Doğrulama
+- `python3 -m pytest -v` → **34/34 PASSED** (tüm modüller)
+- `main` remote'a pushlandı: `4eb865c..3766560 main -> main`
+- Çalışmayan eski branch'ler temizlendi
