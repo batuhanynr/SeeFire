@@ -74,38 +74,85 @@ class NavigationController:
         logger.info("[SECTOR %d] Start. Target=%.1f cm, midpoint=%.1f cm",
                     sector_id, target_cm, self._sector_midpoint_cm)
 
-        while m2_motor.get_total_distance_cm() < target_cm:
-            # Periodic battery health check
-            try:
-                from m6_decision.decision import check_battery_health
-                if not check_battery_health():
-                    logger.error("[NAV] Battery health critical! Aborting navigation.")
-                    raise RuntimeError("Critical battery")
-            except ImportError:
-                pass
+        # Continuous drive state initialization
+        start_cm = m2_motor.get_total_distance_cm()
+        m2_motor.reset_encoder_window()
+        m2_motor.motor_drive("forward", config.DRIVE_SPEED)
+        is_driving = True
 
-            self._check_midpoint(sector_id)
+        try:
+            while True:
+                # 1. Update distance traveled and set the total distance odometer
+                measured = m2_motor.get_measured_distance_cm()
+                current_cm = start_cm + measured
+                m2_motor.set_total_distance_cm(current_cm)
 
-            # Filtered (median of 3) read: protects D₀ from a single noisy
-            # HC-SR04 reading. A bad spike would otherwise distort the
-            # clearance threshold inside the bypass.
-            reading = m3_sensors.get_navigation_sensors_filtered()
-            front = reading.front_cm
+                # Check if waypoint target reached
+                if current_cm >= target_cm:
+                    logger.info("[NAV] Waypoint target %.1f reached (current=%.1f).", target_cm, current_cm)
+                    break
 
-            if front <= 0:
-                logger.warning("[NAV] Front sensor invalid — taking safe step.")
-                m2_motor.drive_distance_cm(config.STEP_DISTANCE_CM)
-                continue
+                # 2. Periodic battery health check
+                try:
+                    from m6_decision.decision import check_battery_health
+                    if not check_battery_health():
+                        logger.error("[NAV] Battery health critical! Aborting navigation.")
+                        raise RuntimeError("Critical battery")
+                except ImportError:
+                    pass
 
-            if front > config.OBSTACLE_THRESHOLD_CM:
-                m2_motor.drive_distance_cm(config.STEP_DISTANCE_CM)
-            else:
-                logger.info("[OBSTACLE] front=%.1f cm — initiating avoidance.", front)
-                self._obstacle.avoid(sector_id, reference_distance=front)
+                # 3. Check and trigger midpoint scan if reached
+                if not self._sector_midpoint_passed and current_cm >= self._sector_midpoint_cm:
+                    ticks_l, ticks_r = m2_motor.get_encoder_ticks()
+                    avg_ticks = (ticks_l + ticks_r) / 2.0
+                    logger.info(
+                        "[CALIBRATION] Midpoint reached at %.1f cm. Raw Encoder Ticks: Left=%d, Right=%d (Avg=%.2f ticks). Current ENCODER_TICKS_PER_CM = %.4f",
+                        current_cm, ticks_l, ticks_r, avg_ticks, config.ENCODER_TICKS_PER_CM
+                    )
+                    logger.info("[NAV] Midpoint reached, pausing for scan.")
+                    m2_motor.stop()
+                    is_driving = False
+                    self._scan_four_directions(f"sector-{sector_id}-midpoint")
+                    self._sector_midpoint_passed = True
+                    # Resume continuous driving
+                    start_cm = m2_motor.get_total_distance_cm()
+                    m2_motor.reset_encoder_window()
+                    m2_motor.motor_drive("forward", config.DRIVE_SPEED)
+                    is_driving = True
+                    continue
+
+                # 4. Obstacle detection
+                reading = m3_sensors.get_navigation_sensors_filtered()
+                front = reading.front_cm
+
+                if 0 < front <= config.OBSTACLE_THRESHOLD_CM:
+                    logger.info("[OBSTACLE] front=%.1f cm — initiating avoidance.", front)
+                    m2_motor.stop()
+                    is_driving = False
+                    self._obstacle.avoid(sector_id, reference_distance=front)
+                    # Resume continuous driving
+                    start_cm = m2_motor.get_total_distance_cm()
+                    m2_motor.reset_encoder_window()
+                    m2_motor.motor_drive("forward", config.DRIVE_SPEED)
+                    is_driving = True
+                    continue
+                elif front <= 0:
+                    logger.warning("[NAV] Front sensor invalid (%.1f cm) — ignoring reading.", front)
+
+                time.sleep(0.05)
+        finally:
+            if is_driving:
+                m2_motor.stop()
 
         # Sector end (waypoint)
+        ticks_l, ticks_r = m2_motor.get_encoder_ticks()
+        avg_ticks = (ticks_l + ticks_r) / 2.0
+        logger.info(
+            "[CALIBRATION] Waypoint reached at %.1f cm. Raw Encoder Ticks: Left=%d, Right=%d (Avg=%.2f ticks). Current ENCODER_TICKS_PER_CM = %.4f",
+            current_cm, ticks_l, ticks_r, avg_ticks, config.ENCODER_TICKS_PER_CM
+        )
         logger.info("[WAYPOINT] Sector %d end.", sector_id)
-        self._snapshot(f"sector-{sector_id}-waypoint")
+        self._scan_four_directions(f"sector-{sector_id}-waypoint")
         # Periodic lateral drift correction: integrates encoder slip and
         # turn-angle error that accumulate between bypasses.
         self._position.verify_and_correct()
