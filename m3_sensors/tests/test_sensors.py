@@ -30,3 +30,39 @@ def test_get_navigation_sensors():
         assert nav_data.front_cm == 45.0
         assert nav_data.center_cm == 45.0
         assert nav_data.right_cm == 20.0
+
+def test_mlx_failure_disables_sensor():
+    """MLX90614 exception logs warning and sets _mlx_sensor to None."""
+    s = sensors.SensorsM3()
+    s._mlx_sensor = True
+    s._bus = True
+
+    with patch('m3_sensors.sensors.MOCK_MODE', False), \
+         patch.object(s, '_read_mlx90614_celsius',
+                      side_effect=OSError("I2C timeout")), \
+         patch.object(s, '_read_mcp3208', return_value=0):
+        result = s.get_fusion_sensors()
+        assert s._mlx_sensor is None
+        assert result.ir_temp == 25.0  # fallback value
+
+def test_mlx_failure_stays_disabled():
+    """After MLX fails, subsequent calls skip without retrying."""
+    s = sensors.SensorsM3()
+    s._mlx_sensor = None
+    s._bus = True
+
+    with patch('m3_sensors.sensors.MOCK_MODE', False), \
+         patch.object(s, '_read_mlx90614_celsius') as mock_read, \
+         patch.object(s, '_read_mcp3208', return_value=0):
+        result = s.get_fusion_sensors()
+        mock_read.assert_not_called()
+        assert result.ir_temp == 25.0
+
+def test_mock_ultrasonic_deterministic():
+    """Mock ultrasonic returns consistent values for same conditions."""
+    from m3_sensors.sensors import _RNG
+    seed_before = _RNG.getstate()
+    v1 = sensors._instance._read_ultrasonic(1, 2)
+    _RNG.setstate(seed_before)
+    v2 = sensors._instance._read_ultrasonic(1, 2)
+    assert v1 == v2

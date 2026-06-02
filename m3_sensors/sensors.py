@@ -29,7 +29,9 @@ except ImportError:
     SPI_AVAILABLE = False
 
 import config
+import random as _random
 
+_RNG = _random.Random(42)
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -137,8 +139,7 @@ class SensorsM3:
 
     def _read_ultrasonic(self, trig_pin: int, echo_pin: int) -> float:
         if MOCK_MODE:
-            import random
-            return random.uniform(15.0, 45.0)
+            return _RNG.uniform(15.0, 45.0)
 
         GPIO.output(trig_pin, GPIO.HIGH)
         time.sleep(0.00001)
@@ -204,10 +205,19 @@ class SensorsM3:
         return self._read_mcp3208(config.BATTERY_ADC_CH)
 
     def cleanup(self) -> None:
+        if MOCK_MODE:
+            return
         if self._spi:
             self._spi.close()
         if self._bus:
             self._bus.close()
+        ultrasonic_pins = [
+            config.TRIG_LEFT, config.ECHO_LEFT,
+            config.TRIG_FRONT, config.ECHO_FRONT,
+            config.TRIG_RIGHT, config.ECHO_RIGHT,
+            config.MQ2_CS_PIN,
+        ]
+        GPIO.cleanup(ultrasonic_pins)
 
 # Default singleton
 _instance = SensorsM3()

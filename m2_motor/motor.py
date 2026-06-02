@@ -135,7 +135,7 @@ class MotorM2:
         speed = max(0, min(100, speed)) # clamp 0-100
 
         if MOCK_MODE:
-            logger.debug(f"[MOCK] motor_drive: {direction} at {speed}% speed")
+            logger.debug("[MOCK] motor_drive: %s at %d%% speed", direction, speed)
             return
 
         if not self._initialized:
@@ -157,7 +157,7 @@ class MotorM2:
         speed = max(0, min(100, speed))
         
         if MOCK_MODE:
-            logger.debug(f"[MOCK] motor_turn: angle {angle} at {speed}% speed")
+            logger.debug("[MOCK] motor_turn: angle %s at %d%% speed", angle, speed)
             return
 
         if not self._initialized:
@@ -215,7 +215,7 @@ class MotorM2:
         Activates or deactivates the alarm outputs.
         """
         if MOCK_MODE:
-            logger.debug(f"[MOCK] set_alarm: LED={led}, BUZZER={buzzer}")
+            logger.debug("[MOCK] set_alarm: LED=%s, BUZZER=%s", led, buzzer)
             return
 
         if not self._initialized:

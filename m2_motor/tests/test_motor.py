@@ -61,3 +61,12 @@ def test_turn_timing():
     
     m.turn_right_90()
     assert m._direction_sign == 0
+
+def test_cleanup_safe_in_mock():
+    """Verify cleanup does not crash in mock mode and is idempotent."""
+    m = motor.MotorM2()
+    m.init_hardware()
+    assert m._initialized is True
+    m.cleanup()
+    assert m._initialized is True  # unchanged in mock mode
+    m.cleanup()  # second call should not raise
