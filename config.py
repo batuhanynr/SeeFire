@@ -87,7 +87,7 @@ POSITION_TOLERANCE_CM = 5.0
 FINE_TUNE_STEP_CM     = 2.0
 
 # Encoder calibration (20 ticks per 20.73cm wheel revolution -> ~0.965 ticks/cm)
-ENCODER_TICKS_PER_CM = 0.965
+ENCODER_TICKS_PER_CM = 2.2209
 # Slots on the encoder disc = ticks per full wheel revolution. Set to your
 # actual disc slot count (common slotted optical discs are 20). Used for RPM.
 ENCODER_TICKS_PER_REV = 20.0
@@ -98,10 +98,14 @@ WHEEL_DIAMETER_MM = 66.0
 
 # Drive parameters
 DRIVE_SPEED = 60   # PWM duty cycle 0-100 for forward
-TURN_SPEED  = 60   # PWM duty cycle 0-100 for in-place turn
+TURN_SPEED  = 95   # PWM duty cycle 0-100 for turning (increased to 95 for maximum pivot torque)
+# Motor speed trims to correct forward drift (1.0 = no trim)
+# If the robot drifts right, decrease LEFT_MOTOR_TRIM (e.g. 0.90)
+LEFT_MOTOR_TRIM = 0.90
+RIGHT_MOTOR_TRIM = 1.0
 # Time-based fallback for distance/turn when no encoder is wired (mock or hardware-absent)
 MOCK_CM_PER_SEC      = 20.0  # nominal forward speed at DRIVE_SPEED duty
-MOCK_TURN_90_SECONDS = 0.8   # nominal time for 90° in-place turn at TURN_SPEED
+MOCK_TURN_90_SECONDS = 2.5   # nominal time for 90° pivot turn at TURN_SPEED (increased to 2.5s for pivot sweep)
 
 # --- Battery Characteristics (2S Li-ion) ---
 BATTERY_MAX_V     = 8.4   # Full charge

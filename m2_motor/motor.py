@@ -134,6 +134,16 @@ class MotorM2:
         """
         speed = max(0, min(100, speed)) # clamp 0-100
 
+        if direction == "forward":
+            self._direction_sign = 1
+            self._motion_speed_cm_per_s = config.MOCK_CM_PER_SEC
+        elif direction == "backward":
+            self._direction_sign = -1
+            self._motion_speed_cm_per_s = -config.MOCK_CM_PER_SEC
+        else:
+            self._direction_sign = 0
+            self._motion_speed_cm_per_s = 0.0
+
         if MOCK_MODE:
             logger.debug("[MOCK] motor_drive: %s at %d%% speed", direction, speed)
             return
@@ -163,12 +173,12 @@ class MotorM2:
         if not self._initialized:
             return
 
-        # Simple differential drive for turning
+        # Pivot turning: one side forward, the other stopped (0) to prevent battery/driver overload
         if angle > 0: # Turn Right
             self._set_left_motor(speed)
-            self._set_right_motor(-speed)
+            self._set_right_motor(0)
         elif angle < 0: # Turn Left
-            self._set_left_motor(-speed)
+            self._set_left_motor(0)
             self._set_right_motor(speed)
         else:
             self.motor_stop()
@@ -183,28 +193,32 @@ class MotorM2:
             self._set_right_motor(0)
 
     def _set_left_motor(self, speed: int):
+        trimmed_speed = int(abs(speed) * getattr(config, "LEFT_MOTOR_TRIM", 1.0))
+        trimmed_speed = max(0, min(100, trimmed_speed))
         if speed > 0:
             GPIO.output(config.MOTOR_IN1, GPIO.LOW)
             GPIO.output(config.MOTOR_IN2, GPIO.HIGH)
-            self.pwm_a.ChangeDutyCycle(speed)
+            self.pwm_a.ChangeDutyCycle(trimmed_speed)
         elif speed < 0:
             GPIO.output(config.MOTOR_IN1, GPIO.HIGH)
             GPIO.output(config.MOTOR_IN2, GPIO.LOW)
-            self.pwm_a.ChangeDutyCycle(-speed)
+            self.pwm_a.ChangeDutyCycle(trimmed_speed)
         else:
             GPIO.output(config.MOTOR_IN1, GPIO.LOW)
             GPIO.output(config.MOTOR_IN2, GPIO.LOW)
             self.pwm_a.ChangeDutyCycle(0)
 
     def _set_right_motor(self, speed: int):
+        trimmed_speed = int(abs(speed) * getattr(config, "RIGHT_MOTOR_TRIM", 1.0))
+        trimmed_speed = max(0, min(100, trimmed_speed))
         if speed > 0:
             GPIO.output(config.MOTOR_IN3, GPIO.LOW)
             GPIO.output(config.MOTOR_IN4, GPIO.HIGH)
-            self.pwm_b.ChangeDutyCycle(speed)
+            self.pwm_b.ChangeDutyCycle(trimmed_speed)
         elif speed < 0:
             GPIO.output(config.MOTOR_IN3, GPIO.HIGH)
             GPIO.output(config.MOTOR_IN4, GPIO.LOW)
-            self.pwm_b.ChangeDutyCycle(-speed)
+            self.pwm_b.ChangeDutyCycle(trimmed_speed)
         else:
             GPIO.output(config.MOTOR_IN3, GPIO.LOW)
             GPIO.output(config.MOTOR_IN4, GPIO.LOW)
@@ -270,7 +284,7 @@ class MotorM2:
             self._set_left_motor(config.DRIVE_SPEED)
             self._set_right_motor(config.DRIVE_SPEED)
 
-        deadline = time.time() + (distance_cm / max(config.MOCK_CM_PER_SEC, 1e-3)) * 3.0
+        deadline = time.time() + (distance_cm / max(config.MOCK_CM_PER_SEC, 1e-3)) * 12.0
         while True:
             traveled = self._measured_distance_since_window_cm()
             if traveled >= distance_cm:
@@ -298,9 +312,9 @@ class MotorM2:
             speed = config.TURN_SPEED
             if direction > 0:
                 self._set_left_motor(speed)
-                self._set_right_motor(-speed)
+                self._set_right_motor(0)
             else:
-                self._set_left_motor(-speed)
+                self._set_left_motor(0)
                 self._set_right_motor(speed)
 
         time.sleep(config.MOCK_TURN_90_SECONDS)
@@ -347,6 +361,19 @@ stop = _instance.stop
 
 def get_total_distance_cm() -> float:
     return _instance.total_distance_cm
+
+
+def reset_encoder_window() -> None:
+    _instance._reset_encoder_window()
+
+
+def get_measured_distance_cm() -> float:
+    return _instance._measured_distance_since_window_cm()
+
+
+def get_encoder_ticks() -> tuple[int, int]:
+    with _instance._tick_lock:
+        return _instance._left_ticks, _instance._right_ticks
 
 
 def cleanup() -> None:

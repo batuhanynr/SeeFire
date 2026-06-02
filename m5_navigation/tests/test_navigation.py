@@ -248,3 +248,50 @@ def test_side_pass_detects_wall_via_front_sensor():
         assert wall_hit is True
         assert traveled == 0.0
 
+
+def test_traverse_sector_continuous_smooth_drive():
+    """Verify that _traverse_sector drives continuously, handles midpoints, and stops at waypoint."""
+    from m5_navigation.navigation import NavigationController
+    import m2_motor
+
+    nc = NavigationController()
+
+    # Reset total distance
+    m2_motor.set_total_distance_cm(0.0)
+
+    # We mock the sensor readings to always return plenty of space (no obstacle)
+    mock_sensor_reading = MagicMock()
+    mock_sensor_reading.front_cm = 100.0  # safe
+    mock_sensor_reading.left_cm = 200.0
+    mock_sensor_reading.right_cm = 200.0
+
+    # We mock get_measured_distance_cm to simulate progression:
+    # 1st loop: 1.0 cm (waypoint target is 10.0 cm, midpoint is 5.0 cm)
+    # 2nd loop: 4.0 cm (below midpoint)
+    # 3rd loop: 6.0 cm (midpoint reached! triggers scan and resets encoder window)
+    # 4th loop (after reset/resume): 2.0 cm (total = 6.0 + 2.0 = 8.0 cm)
+    # 5th loop: 5.0 cm (total = 6.0 + 5.0 = 11.0 cm -> waypoint target reached!)
+    measured_distances = [1.0, 4.0, 6.0, 2.0, 5.0]
+
+    with patch('m3_sensors.get_navigation_sensors_filtered', return_value=mock_sensor_reading), \
+         patch('m2_motor.get_measured_distance_cm', side_effect=measured_distances), \
+         patch('m2_motor.reset_encoder_window') as mock_reset, \
+         patch('m2_motor.motor_drive') as mock_drive, \
+         patch('m2_motor.stop') as mock_stop, \
+         patch('time.sleep') as mock_sleep, \
+         patch.object(nc, '_scan_four_directions') as mock_scan, \
+         patch.object(nc._position, 'verify_and_correct') as mock_verify:
+
+        nc._traverse_sector(target_cm=10.0, sector_id=1)
+
+        # Let's verify motor commands:
+        # Initial forward drive
+        mock_drive.assert_any_call("forward", config.DRIVE_SPEED)
+        # Midpoint scan should have been triggered
+        mock_scan.assert_any_call("sector-1-midpoint")
+        # Total distance at the end of traverse must be at least the target
+        assert m2_motor.get_total_distance_cm() >= 10.0
+        # Post-traversal waypoint actions
+        mock_scan.assert_any_call("sector-1-waypoint")
+        mock_verify.assert_called_once()
+

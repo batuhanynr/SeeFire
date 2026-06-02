@@ -505,5 +505,8 @@ git push origin main
 **2. Çift Motorlu Duruş & Sürüş Yön Polaritesi Hizalaması:**
 - `m2_motor/motor.py`: Motor yön polariteleri (`HIGH`/`LOW` GPIO sinyalleri) tersine çevrilerek ileri-geri sürüş yönlerinin donanımla tam uyumlu çalışması sağlanmıştır.
 
+**3. Zaman Aşımı (Timeout) Toleransı Artırıldı:**
+- `m2_motor/motor.py`: Robotun ataletle kalkışı veya düşük fiziksel hızlarda 5 cm'lik adımları tamamlamadan önce 0.75 saniyelik zaman aşımına girmesini engellemek için `drive_distance_cm` içerisindeki zaman aşımı çarpanı `3.0`'dan `12.0`'ye yükseltilmiştir (Adım başına 3.0 saniye tolerans). Bu sayede robot dur-kalk sarsıntısından kurtulacak, adımını tamamlayınca akıcı bir şekilde ilerleyecek ve tam olarak fiziksel 5. metreye geldiğinde taramasını yapacaktır.
+
 ### Doğrulama
-- `python3 -m pytest -v --ignore=test_gpio.py` → **50/50 PASSED** (100% başarı, kalibrasyon uyumundan sonra tüm birim testleri sıfır hata ile yeşile dönmüştür).
+- `python3 -m pytest -v --ignore=test_gpio.py` → **50/50 PASSED** (100% başarı, kalibrasyon ve tolerans uyumundan sonra tüm birim testleri sıfır hata ile yeşile dönmüştür).
