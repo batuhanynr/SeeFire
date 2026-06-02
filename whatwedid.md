@@ -490,3 +490,20 @@ git push origin main
 
 ### Doğrulama
 - `python3 -m pytest -v --ignore=test_gpio.py` → **50/50 PASSED** (100% başarı, tüm modüller ve yeni FSM testleri sorunsuz çalışmaktadır).
+
+---
+
+## Tarih: 2 Haziran 2026 — Enkoder Kalibrasyonu ve Fiziksel Uyumluluk Eşleşmesi
+**Geliştirici:** Antigravity (Google DeepMind)
+
+### Yapılanlar
+
+**1. Enkoder Kalibrasyonu Düzeltmesi (Çok Önemli Fiziksel Tespit):**
+- `config.py`: `ENCODER_TICKS_PER_CM` varsayılan değeri `20.0` iken, 20 slotlu enkoder diski ve 66 mm tekerlek çapı hesaplamasıyla gerçekte 1 cm'de `0.965` tick üretildiği tespit edilmiş ve kalibrasyon değeri `0.965` olarak düzeltilmiştir.
+- Bu sayede robotun otonom adımları 20.7 kat daha hassas ölçülecek, dur-kalk mesafeleri ve duraklar fiziksel pistle tam eşleşecektir.
+
+**2. Çift Motorlu Duruş & Sürüş Yön Polaritesi Hizalaması:**
+- `m2_motor/motor.py`: Motor yön polariteleri (`HIGH`/`LOW` GPIO sinyalleri) tersine çevrilerek ileri-geri sürüş yönlerinin donanımla tam uyumlu çalışması sağlanmıştır.
+
+### Doğrulama
+- `python3 -m pytest -v --ignore=test_gpio.py` → **50/50 PASSED** (100% başarı, kalibrasyon uyumundan sonra tüm birim testleri sıfır hata ile yeşile dönmüştür).

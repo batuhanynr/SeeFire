@@ -184,12 +184,12 @@ class MotorM2:
 
     def _set_left_motor(self, speed: int):
         if speed > 0:
-            GPIO.output(config.MOTOR_IN1, GPIO.HIGH)
-            GPIO.output(config.MOTOR_IN2, GPIO.LOW)
-            self.pwm_a.ChangeDutyCycle(speed)
-        elif speed < 0:
             GPIO.output(config.MOTOR_IN1, GPIO.LOW)
             GPIO.output(config.MOTOR_IN2, GPIO.HIGH)
+            self.pwm_a.ChangeDutyCycle(speed)
+        elif speed < 0:
+            GPIO.output(config.MOTOR_IN1, GPIO.HIGH)
+            GPIO.output(config.MOTOR_IN2, GPIO.LOW)
             self.pwm_a.ChangeDutyCycle(-speed)
         else:
             GPIO.output(config.MOTOR_IN1, GPIO.LOW)
@@ -198,12 +198,12 @@ class MotorM2:
 
     def _set_right_motor(self, speed: int):
         if speed > 0:
-            GPIO.output(config.MOTOR_IN3, GPIO.HIGH)
-            GPIO.output(config.MOTOR_IN4, GPIO.LOW)
-            self.pwm_b.ChangeDutyCycle(speed)
-        elif speed < 0:
             GPIO.output(config.MOTOR_IN3, GPIO.LOW)
             GPIO.output(config.MOTOR_IN4, GPIO.HIGH)
+            self.pwm_b.ChangeDutyCycle(speed)
+        elif speed < 0:
+            GPIO.output(config.MOTOR_IN3, GPIO.HIGH)
+            GPIO.output(config.MOTOR_IN4, GPIO.LOW)
             self.pwm_b.ChangeDutyCycle(-speed)
         else:
             GPIO.output(config.MOTOR_IN3, GPIO.LOW)
