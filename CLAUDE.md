@@ -19,7 +19,7 @@ The main deviation is navigation:
 | ID | Module | Current Status | Notes |
 |---|---|---|---|
 | M1 | Chassis & Mechanics | Hardware-only | No Python implementation. |
-| M2 | Motor Control & Power | Implemented | L298N drive, alarm I/O, battery voltage read, encoder-backed distance API, `cleanup()` with GPIO release, `SEEFIRE_FORCE_MOCK` env var, mock mode. 5 tests. |
+| M2 | Motor Control & Power | Implemented | L298N ×2 (front+rear, parallel GPIO) drive, alarm I/O, battery voltage read, encoder-backed distance API, `cleanup()` with GPIO release, `SEEFIRE_FORCE_MOCK` env var, mock mode. 5 tests. |
 | M3 | Sensor Integration | Implemented | MQ-2, MLX90614 (raw SMBus, no adafruit dependency), HC-SR04 x3 (`left/front/right`), median-filtered nav reads, deterministic mock RNG, `SEEFIRE_FORCE_MOCK` env var, full GPIO cleanup, mock mode. 6 tests. |
 | M4 | Vision | Partially implemented | Camera open/close, frame capture, background `_update_loop` thread, obstacle turn-direction hint (Canny edge). Fire/smoke YOLOv8n inference pipeline not integrated yet (placeholder). 0 tests. |
 | M5 | Navigation | Implemented | Waypoint-driven sector traversal, obstacle bypass redesign (wall-hit retreat, forward-pass acquire/release, 4-direction midpoint scan, encoder rollback via `_drive_lateral`), sütun-uyumlu position correction, median-filtered D₀, offline simülatör (`m5_navigation/sim/`). 13 tests. |

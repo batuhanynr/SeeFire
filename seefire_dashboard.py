@@ -20,8 +20,9 @@ Controls:
     Q          quit
 
 Hardware note:
-    4 physical motors driven as two L298N channels: left pair (FL+RL) and
-    right pair (FR+RR). Same PWM per side.
+    4 physical motors driven by two L298N boards (front #1 + rear #2) with
+    parallel GPIO signals. Motor 1=FL, 2=FR (L298N #1), Motor 3=RL, 4=RR
+    (L298N #2). Same PWM per side.
 
 Heavy sensor reads (ultrasonic/ADC/I2C) run on a background thread (~0.5 s);
 the drive loop stays fast (20 Hz). Encoders are interrupt-driven.
@@ -57,7 +58,7 @@ ADC_REF_V = 3.3
 
 
 # ---------------------------------------------------------------------------
-# Drive hardware (L298N motors + interrupt encoders)
+# Drive hardware (L298N ×2 motors + interrupt encoders)
 # ---------------------------------------------------------------------------
 class DriveHardware:
     def __init__(self) -> None:
@@ -596,7 +597,7 @@ def curses_main(stdscr, level: int) -> int:
         statuses = hub.probe()
         # Drive/encoders status from successful init.
         statuses.insert(0, SensorStatus("drive", "Motor + Enkoder", True,
-                                        f"L298N + enc GPIO{config.ENCODER_LEFT_PIN}/{config.ENCODER_RIGHT_PIN}"))
+                                        f"L298N ×2 + enc GPIO{config.ENCODER_LEFT_PIN}/{config.ENCODER_RIGHT_PIN}"))
 
         # 5 s check screen.
         end = time.monotonic() + CHECK_SECONDS

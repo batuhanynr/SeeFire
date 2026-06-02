@@ -329,7 +329,7 @@ def check_fusion_read() -> CheckResult:
 
 
 def check_motor_driver_safe() -> CheckResult:
-    """Exercise L298N GPIO/PWM setup with PWM duty 0 so wheels should not move."""
+    """Exercise L298N ×2 GPIO/PWM setup with PWM duty 0 so wheels should not move."""
     try:
         import RPi.GPIO as GPIO
     except ImportError as exc:
@@ -361,7 +361,7 @@ def check_motor_driver_safe() -> CheckResult:
     return CheckResult(
         "motor_driver_safe",
         True,
-        "L298N IN1-IN4 and ENA/ENB GPIO/PWM configured; PWM duty stayed 0",
+        "L298N ×2 IN1-IN4 and ENA/ENB GPIO/PWM configured (parallel); PWM duty stayed 0",
     )
 
 
@@ -402,7 +402,7 @@ def main() -> int:
     parser.add_argument("--ultrasonic", action="store_true", help="Run HC-SR04 distance checks")
     parser.add_argument("--alarm", action="store_true", help="Run LED/buzzer output check")
     parser.add_argument("--fusion", action="store_true", help="Run M3 fusion read through module")
-    parser.add_argument("--motor-safe", action="store_true", help="Run safe L298N GPIO/PWM test without wheel motion")
+    parser.add_argument("--motor-safe", action="store_true", help="Run safe L298N ×2 GPIO/PWM test without wheel motion")
     parser.add_argument("--encoder-seconds", type=float, default=5.0)
     parser.add_argument("--camera-device", type=int, default=0)
     parser.add_argument("--snapshot", default="runtime_data/snapshots/hardware_camera_check.jpg")
