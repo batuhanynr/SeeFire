@@ -14,14 +14,14 @@ Yeni bir rapor yazılacağı zaman bu belgedeki bilgiler **güncel doğru (sourc
 |---|---|---|---|---|
 | 1.1 | **ADC Entegresi** | MCP3008 (10-bit, 0–1023) | **MCP3208** (12-bit, 0–4095) | Daha yüksek hassasiyet. `sensors.py` → `_read_mcp3208()` fonksiyonu 12-bit SPI protokolü kullanıyor. ADC max değeri kodun her yerinde 4095. |
 | 1.2 | **Ultrasonik Sensör Sayısı** | 2 adet HC-SR04 (Ön + Sağ) | **3 adet** HC-SR04 (Sol + Ön + Sağ) | Sadece duvar takibi değil, ön engel algılama + yan sensörlerle sıkışmayı önleme. `config.py`: `TRIG_LEFT/ECHO_LEFT`, `TRIG_FRONT/ECHO_FRONT`, `TRIG_RIGHT/ECHO_RIGHT`. |
-| 1.3 | **Ultrasonik Sensör Pinleri** | Rapor Appendix A: `TRIG_FRONT=23, ECHO_FRONT=24, TRIG_RIGHT=25, ECHO_RIGHT=8` | `TRIG_LEFT=23, ECHO_LEFT=24, TRIG_RIGHT=25, ECHO_RIGHT=8, TRIG_FRONT=16, ECHO_FRONT=20` | Eski "front" pinleri artık "left" olarak adlandırıldı; 3. sensör (front) yeni pinlerde (16, 20). |
+| 1.3 | **Ultrasonik Sensör Pinleri** | Rapor Appendix A: `TRIG_FRONT=23, ECHO_FRONT=24, TRIG_RIGHT=25, ECHO_RIGHT=8` | `TRIG_FRONT=23, ECHO_FRONT=24, TRIG_RIGHT=25, ECHO_RIGHT=21, TRIG_LEFT=20, ECHO_LEFT=16` | Sağ ECHO `GPIO8` SPI CE0 çakışması nedeniyle `GPIO21`'e taşındı. |
 | 1.4 | **Batarya Tipi** | Raporda "LiPo 2S, 7.4V, 2200mAh" | **2S 18650 Li-ion Pack** (nominal 7.4V, max 8.4V, BMS'li) | 18650 hücreler daha güvenli ve şarj edilebilir. `config.py`: `BATTERY_MAX_V=8.4`, `BATTERY_NOMINAL_V=7.4`. |
 | 1.5 | **Batarya Voltaj Bölücü** | Raporda belirtilmemiş (sadece ADC üzerinden okuma bahsediyor) | **20kΩ / 10kΩ voltaj bölücü** MCP3208'in 1. kanalında | `config.py`: `VDIV_R1=20000.0`, `VDIV_R2=10000.0`, `BATTERY_ADC_CH=1`. |
 | 1.6 | **Batarya Eşik Değerleri** | Rapor Appendix B: `BATTERY_LOW_V=7.0`, `BATTERY_CRIT_V=6.6` | `BATTERY_LOW_V=6.8`, `BATTERY_CRIT_V=6.4` | Li-ion hücre başına 3.2V–4.2V aralığına göre kalibre edildi. |
 | 1.7 | **Tehlike Eşikleri** | Rapor Section 6.2: `ir_temp > 55°C` VERIFY tetikleyici | `IR_TEMP_THRESHOLD = 60.0°C` (config.py) | Gerçek sensör testleri sonucu ayarlandı. |
 | 1.8 | **MQ-2 ADC Max** | Rapor: smoke_level 0–1023 aralığında | smoke_level 0–**4095** aralığında | MCP3208 12-bit olduğu için değer aralığı 4 kat genişledi. Fusion score formülünde `smoke_level / 4095` kullanılmalıdır. |
 | 1.9 | **Kaldırılan Sensörler** | Rapor C.2: MPU6050 ve DHT22 zaten kaldırılmış olarak belirtiliyor | Tamamen kaldırılmış, kodda hiçbir referans yok | Raporla uyumlu. |
-| 1.10 | **Tekerlek Enkoder** | Raporda yok (dead-reckoning ile zaman tabanlı tahmin) | **2 adet tekerlek enkoderi** eklendi (GPIO 6, 21) | `config.py`: `ENCODER_LEFT_PIN=6`, `ENCODER_RIGHT_PIN=21`, `ENCODER_TICKS_PER_CM=20.0`. Motor modülünde rising-edge interrupt ile pulse sayımı yapılıyor. |
+| 1.10 | **Tekerlek Enkoder** | Raporda yok (dead-reckoning ile zaman tabanlı tahmin) | **2 adet tekerlek enkoderi** eklendi (GPIO4, GPIO7) | `config.py`: `ENCODER_LEFT_PIN=4`, `ENCODER_RIGHT_PIN=7`, `ENCODER_TICKS_PER_CM=20.0`. Motor modülünde rising-edge interrupt ile pulse sayımı yapılıyor. |
 
 ---
 

@@ -6,21 +6,21 @@ Supports Mock Mode for development without physical sensors.
 """
 from dataclasses import dataclass
 from statistics import median
+import os
 import time
 import logging
 
 try:
     import RPi.GPIO as GPIO
-    MOCK_MODE = False
+    MOCK_MODE = os.environ.get("SEEFIRE_FORCE_MOCK") == "1"
 except ImportError:
     MOCK_MODE = True
 
 try:
     from smbus2 import SMBus
-    import adafruit_mlx90614
-    MLX_AVAILABLE = True
+    I2C_AVAILABLE = True
 except ImportError:
-    MLX_AVAILABLE = False
+    I2C_AVAILABLE = False
 
 try:
     import spidev
@@ -77,21 +77,29 @@ class SensorsM3:
             GPIO.setup(pin, GPIO.IN)
 
         # Setup I2C (MLX90614)
-        if MLX_AVAILABLE:
+        if I2C_AVAILABLE:
             try:
-                self._bus = SMBus(1)
-                self._mlx_sensor = adafruit_mlx90614.MLX90614(self._bus)
+                self._bus = SMBus(config.I2C_BUS)
+                # Probe object-temperature register once.
+                self._read_mlx90614_celsius(0x07)
+                self._mlx_sensor = True
                 logger.info("MLX90614 connected via I2C.")
             except Exception as e:
                 logger.error(f"MLX90614 I2C failed: {e}")
+                if self._bus:
+                    self._bus.close()
+                    self._bus = None
                 self._mlx_sensor = None
 
         # Setup SPI (MCP3208 for MQ2 and Battery)
         if SPI_AVAILABLE:
             try:
+                GPIO.setup(config.MQ2_CS_PIN, GPIO.OUT)
+                GPIO.output(config.MQ2_CS_PIN, GPIO.HIGH)
                 self._spi = spidev.SpiDev()
                 self._spi.open(0, 0)
                 self._spi.max_speed_hz = 1350000
+                self._spi.no_cs = True
                 logger.info("SPI MCP3208 connected.")
             except Exception as e:
                 logger.error(f"SPI init failed: {e}")
@@ -108,9 +116,24 @@ class SensorsM3:
             
         if not self._spi:
             return 0
-        adc = self._spi.xfer2([6 | (channel >> 2), (channel & 3) << 6, 0])
-        data = ((adc[1] & 15) << 8) + adc[2]
-        return data
+        GPIO.output(config.MQ2_CS_PIN, GPIO.LOW)
+        time.sleep(0.00001)
+        try:
+            adc = self._spi.xfer2([6 | (channel >> 2), (channel & 3) << 6, 0])
+            data = ((adc[1] & 15) << 8) + adc[2]
+            return data
+        finally:
+            GPIO.output(config.MQ2_CS_PIN, GPIO.HIGH)
+
+    def _read_mlx90614_celsius(self, register: int = 0x07) -> float:
+        """Read MLX90614 RAM temperature register with SMBus.
+
+        Register 0x06 = ambient, 0x07 = object. Raw unit is 0.02 Kelvin.
+        """
+        if not self._bus:
+            raise RuntimeError("MLX90614 I2C bus is not open")
+        raw = self._bus.read_word_data(config.MLX90614_ADDR, register)
+        return (raw * 0.02) - 273.15
 
     def _read_ultrasonic(self, trig_pin: int, echo_pin: int) -> float:
         if MOCK_MODE:
@@ -148,7 +171,7 @@ class SensorsM3:
             ir = 28.5
         elif self._mlx_sensor:
             try:
-                ir = float(self._mlx_sensor.object_temperature)
+                ir = float(self._read_mlx90614_celsius(0x07))
             except Exception:
                 pass
                 

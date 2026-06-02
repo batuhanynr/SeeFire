@@ -20,7 +20,7 @@
 #define M3_TRIG_LEFT_PIN             23
 #define M3_ECHO_LEFT_PIN             24
 #define M3_TRIG_RIGHT_PIN            25
-#define M3_ECHO_RIGHT_PIN            8
+#define M3_ECHO_RIGHT_PIN            21
 #define M3_TRIG_FRONT_PIN            16
 #define M3_ECHO_FRONT_PIN            20
 
