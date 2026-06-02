@@ -22,17 +22,20 @@ def test_position_verifier_start_ok():
         # Should not raise any error
         pv.verify_start()
 
-def test_position_verifier_start_fails():
-    """Verify start fails when sensors are outside tolerance."""
-    mock_reading = MagicMock()
-    mock_reading.left_cm = config.START_LEFT_CM + config.POSITION_TOLERANCE_CM + 1.0
-    mock_reading.right_cm = config.START_RIGHT_CM
-    
-    with patch('m3_sensors.get_navigation_sensors_filtered', return_value=mock_reading):
+@patch('m2_motor.turn_right_90')
+@patch('time.sleep')
+def test_position_verifier_start_aligns_when_off_center(mock_sleep, mock_turn):
+    """Verify start spins the robot in place when off-center, then stops when aligned."""
+    mock_reading_off = MagicMock(left_cm=45.0, right_cm=30.0) # diff = 15.0 > 10.0
+    mock_reading_on = MagicMock(left_cm=30.0, right_cm=30.0)  # diff = 0.0 <= 10.0
+
+    with patch('m3_sensors.get_navigation_sensors_filtered', side_effect=[mock_reading_off, mock_reading_on]):
         pv = PositionVerifier()
-        with pytest.raises(RuntimeError) as excinfo:
-            pv.verify_start()
-        assert "Start position out of tolerance" in str(excinfo.value)
+        pv.verify_start()
+
+        # Should have turned right once to align
+        mock_turn.assert_called_once()
+        mock_sleep.assert_called_once_with(0.5)
 
 def test_obstacle_avoidance_direction_decision():
     """Verify that avoidance uses camera hint first, then ultrasonic."""
@@ -155,14 +158,17 @@ def test_forward_pass_clears_when_side_sensor_passes_obstacle():
 def test_verify_and_correct_skips_when_corridor_width_mismatches():
     """Two-sensor sanity gate must skip correction when left+right ≠ expected
     corridor width (e.g. a column is partially blocking one sensor)."""
-    # Expected 30+30=60. Reading 10+28=38 → 22 cm off, way past 2×5 tolerance.
-    mock_reading = MagicMock(left_cm=10.0, right_cm=28.0)
+    # Expected sum = START_LEFT_CM + START_RIGHT_CM. We make it 22 cm off to force skip.
+    mock_reading = MagicMock(
+        left_cm=config.START_LEFT_CM - 15.0,
+        right_cm=config.START_RIGHT_CM - 7.0
+    )
 
     with patch('m3_sensors.get_navigation_sensors_filtered',
                return_value=mock_reading), \
-         patch('m2_motor.turn_right_90') as mock_turn_r, \
-         patch('m2_motor.turn_left_90') as mock_turn_l, \
-         patch('m2_motor.drive_distance_cm') as mock_drive:
+          patch('m2_motor.turn_right_90') as mock_turn_r, \
+          patch('m2_motor.turn_left_90') as mock_turn_l, \
+          patch('m2_motor.drive_distance_cm') as mock_drive:
         pv = PositionVerifier()
         pv.verify_and_correct()
         # No motor commands issued — correction was skipped.
@@ -173,15 +179,17 @@ def test_verify_and_correct_skips_when_corridor_width_mismatches():
 
 def test_verify_and_correct_applies_when_width_consistent():
     """If left+right is within tolerance and left_err is large, correct."""
-    # 35+25=60 (width OK), left_err=+5 (still within single-sensor tolerance=5)
-    # Use 36+24=60 with left_err=6 to actually trigger correction.
-    mock_reading = MagicMock(left_cm=36.0, right_cm=24.0)
+    # Sum is exactly consistent (START_LEFT_CM + START_RIGHT_CM), left_err = +6.0 > tolerance(5)
+    mock_reading = MagicMock(
+        left_cm=config.START_LEFT_CM + 6.0,
+        right_cm=config.START_RIGHT_CM - 6.0
+    )
 
     with patch('m3_sensors.get_navigation_sensors_filtered',
                return_value=mock_reading), \
-         patch('m2_motor.turn_right_90') as mock_turn_r, \
-         patch('m2_motor.turn_left_90') as mock_turn_l, \
-         patch('m2_motor.drive_distance_cm') as mock_drive:
+          patch('m2_motor.turn_right_90') as mock_turn_r, \
+          patch('m2_motor.turn_left_90') as mock_turn_l, \
+          patch('m2_motor.drive_distance_cm') as mock_drive:
         pv = PositionVerifier()
         pv.verify_and_correct()
         # left_err = +6 > tolerance(5) → rightward correction

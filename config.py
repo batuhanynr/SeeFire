@@ -53,9 +53,9 @@ FUSION_CLEAR_THRESH = 0.4
 
 # Route as list of (target_north_cm, sector_id). Distance is cumulative from start.
 WAYPOINTS = [
-    (100, 1),
-    (200, 2),
-    (300, 3),
+    (1000, 1),
+    (2000, 2),
+    (2200, 3),
 ]
 
 # Forward-step granularity for the main loop (smaller = finer midpoint detection)
@@ -81,8 +81,8 @@ SIDE_PASS_SAFETY_CAP_CM = 200.0
 FORWARD_PASS_SAFETY_CAP_CM = 100.0
 
 # Start position reference (left/right wall distances at south origin)
-START_LEFT_CM  = 30.0
-START_RIGHT_CM = 30.0
+START_LEFT_CM  = 200.0
+START_RIGHT_CM = 200.0
 POSITION_TOLERANCE_CM = 5.0
 FINE_TUNE_STEP_CM     = 2.0
 

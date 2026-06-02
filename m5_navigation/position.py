@@ -17,22 +17,27 @@ logger = logging.getLogger(__name__)
 class PositionVerifier:
 
     def verify_start(self) -> None:
-        """Raise RuntimeError if the robot is not within tolerance of the
-        configured start-of-route position."""
-        reading = m3_sensors.get_navigation_sensors_filtered()
-        left_err = abs(reading.left_cm - config.START_LEFT_CM)
-        right_err = abs(reading.right_cm - config.START_RIGHT_CM)
+        """Verify the robot is centered in the corridor.
+        If the difference between left and right measurements is greater than 10 cm,
+        spin in place until centered, then proceed with navigation."""
+        import time
+        while True:
+            reading = m3_sensors.get_navigation_sensors_filtered()
+            diff = abs(reading.left_cm - reading.right_cm)
 
-        if left_err > config.POSITION_TOLERANCE_CM or right_err > config.POSITION_TOLERANCE_CM:
-            raise RuntimeError(
-                "Start position out of tolerance. "
-                f"left={reading.left_cm:.1f} (expected {config.START_LEFT_CM:.1f} "
-                f"±{config.POSITION_TOLERANCE_CM:.1f}), "
-                f"right={reading.right_cm:.1f} (expected {config.START_RIGHT_CM:.1f} "
-                f"±{config.POSITION_TOLERANCE_CM:.1f})"
+            if diff <= 10.0:
+                logger.info("Start position OK (centered): left=%.1f cm, right=%.1f cm (diff=%.1f cm)",
+                            reading.left_cm, reading.right_cm, diff)
+                break
+
+            logger.warning(
+                "Robot NOT centered! left=%.1f cm, right=%.1f cm (diff=%.1f cm > 10.0 cm). "
+                "Rotating in place to align...",
+                reading.left_cm, reading.right_cm, diff
             )
-        logger.info("Start position OK: left=%.1f cm, right=%.1f cm",
-                    reading.left_cm, reading.right_cm)
+            # Spin 90 degrees to indicate off-center and try to find a better alignment
+            m2_motor.turn_right_90()
+            time.sleep(0.5)
 
     def verify_and_correct(self) -> None:
         """Lateral fine-tune. Called after bypass and at every waypoint.
