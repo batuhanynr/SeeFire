@@ -172,8 +172,9 @@ class SensorsM3:
         elif self._mlx_sensor:
             try:
                 ir = float(self._read_mlx90614_celsius(0x07))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("MLX90614 read failed: %s. Disabling IR sensor.", e)
+                self._mlx_sensor = None
                 
         return FusionData(smoke_level=smoke, smoke_alert=alert, ir_temp=ir, timestamp=time.time())
 

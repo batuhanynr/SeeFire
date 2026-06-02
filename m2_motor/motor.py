@@ -306,6 +306,25 @@ class MotorM2:
         time.sleep(config.MOCK_TURN_90_SECONDS)
         self.stop()
 
+    def cleanup(self) -> None:
+        """Release all GPIO resources. Safe to call multiple times."""
+        if MOCK_MODE or not self._initialized:
+            return
+        self.stop()
+        if self.pwm_a:
+            self.pwm_a.stop()
+        if self.pwm_b:
+            self.pwm_b.stop()
+        GPIO.cleanup([
+            config.MOTOR_IN1, config.MOTOR_IN2,
+            config.MOTOR_IN3, config.MOTOR_IN4,
+            config.MOTOR_ENA, config.MOTOR_ENB,
+            config.LED_PIN, config.BUZZER_PIN,
+            config.ENCODER_LEFT_PIN, config.ENCODER_RIGHT_PIN,
+        ])
+        self._initialized = False
+        logger.info("M2 GPIO resources released.")
+
     def stop(self) -> None:
         self._direction_sign = 0
         self._motion_speed_cm_per_s = 0.0
@@ -328,3 +347,7 @@ stop = _instance.stop
 
 def get_total_distance_cm() -> float:
     return _instance.total_distance_cm
+
+
+def cleanup() -> None:
+    _instance.cleanup()
