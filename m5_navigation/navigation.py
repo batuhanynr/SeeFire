@@ -75,6 +75,15 @@ class NavigationController:
                     sector_id, target_cm, self._sector_midpoint_cm)
 
         while m2_motor.get_total_distance_cm() < target_cm:
+            # Periodic battery health check
+            try:
+                from m6_decision.decision import check_battery_health
+                if not check_battery_health():
+                    logger.error("[NAV] Battery health critical! Aborting navigation.")
+                    raise RuntimeError("Critical battery")
+            except ImportError:
+                pass
+
             self._check_midpoint(sector_id)
 
             # Filtered (median of 3) read: protects D₀ from a single noisy

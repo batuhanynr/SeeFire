@@ -455,3 +455,38 @@ git push origin main
 - `demo.py` çalışıyor: M7 logging + M3 sensor mock demo başarılı
 - `main` remote'a pushlandı: `3766560..5b62c1e main -> main`
 - Repo temiz: `__pycache__` track edilmiyor, `config_updater.py` yok, `demo.py` güncel API kullanıyor
+
+---
+
+## Tarih: 2 Haziran 2026 — FSM Karar Mekanizması (M6) Tamamlama ve Entegrasyon
+**Geliştirici:** Antigravity (Google DeepMind)
+
+### Yapılanlar
+
+**1. M6 Decision Engine FSM Kesme ve Askıya Alma Entegrasyonu:**
+- `m6_decision/decision.py`: FSM'in navigasyon döngüsünü askıya alabilmesi için `ThreatVerificationTriggered` adlı yeni bir yapılandırılmış istisna (structured exception) tanımlandı.
+- `m6_decision/decision.py`: `_on_snapshot` callback'i içerisinde, füzyon skoru alarm eşiğini aşıyorsa (`fusion_score >= config.FUSION_ALARM_THRESH`) durum `VERIFY` olarak güncellenip `ThreatVerificationTriggered` istisnası fırlatılması sağlandı.
+- `m6_decision/decision.py`: `_handle_state` içindeki `NAVIGATE` durumu güncellendi; navigasyon döngüsünün `ThreatVerificationTriggered` veya `ObstacleBlockedError` ile kesilmesi durumları yakalanıp durum yönetimi (`RobotState.VERIFY` veya `RobotState.STOP`) sorunsuz entegre edildi.
+
+**2. M5 Navigasyon Periyodik Batarya Sağlık Takibi:**
+- `m5_navigation/navigation.py`: Sektör traversal döngüsü (`_traverse_sector` while döngüsü) içine her 5 cm'lik ileri adım öncesinde çalışmak üzere batarya sağlığı kontrolü eklendi.
+- Kritik voltaj durumunda (`voltage < 6.4V`), navigasyon döngüsünün anında fırlatacağı `RuntimeError("Critical battery")` ile robotun donanım olarak durdurulması sağlandı.
+
+**3. M4 Vision Paket Entegrasyonu:**
+- `m4_vision/__init__.py`: Karar mekanizmasının sensor füzyonunda ihtiyaç duyduğu `get_fire_confidence` fonksiyonu paketten dışarı aktarıldı (export edildi), böylece `ImportError` veya `AttributeError` engellendi.
+
+**4. M6 Birim Testleri (Unit Tests):**
+- `m6_decision/tests/test_decision.py`: 12 adet kapsamlı birim testi yazılarak;
+  - FSM başlangıç durumları,
+  - Füzyon skoru matematiksel hesaplamaları,
+  - Batarya sağlık seviyeleri (Normal, Düşük, Kritik),
+  - Yüksek risk algılanmasında `ThreatVerificationTriggered` kesme mekanizması,
+  - `ObstacleBlockedError` ile abort geçişleri,
+  - `VERIFY` durumundan `ALARM` veya `NAVIGATE` geçiş süreçleri tam kapsama ile doğrulandı.
+
+**5. M6 Tanımlama ve Mimari Notları Güncellemeleri:**
+- `m6_decision/README.md` ve `m6_decision/__init__.py` güncellenerek M6 Decision Engine'in tamamen implement edildiği belgelendi.
+- Eski mimari belgesi `CLAUDE.original.md` silindi ve güncel, tutarlı bilgileri yansıtan `CLAUDE.md` dosyası oluşturuldu.
+
+### Doğrulama
+- `python3 -m pytest -v --ignore=test_gpio.py` → **50/50 PASSED** (100% başarı, tüm modüller ve yeni FSM testleri sorunsuz çalışmaktadır).

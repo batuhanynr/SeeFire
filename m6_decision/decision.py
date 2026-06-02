@@ -9,9 +9,15 @@ import time
 from enum import Enum, auto
 from m2_motor import motor
 from m5_navigation.navigation import NavigationController
+from m5_navigation.obstacle import ObstacleBlockedError
 import m7_logging
 
 logger = logging.getLogger(__name__)
+
+
+class ThreatVerificationTriggered(Exception):
+    """Exception raised to interrupt navigation loop for verification when risk is high."""
+    pass
 
 
 class RobotState(Enum):
@@ -57,6 +63,7 @@ class DecisionEngine:
         if self.fusion_score >= config.FUSION_ALARM_THRESH and self.state == RobotState.NAVIGATE:
             logger.warning("[DECISION] Fusion score %.2f exceeds alarm threshold!", self.fusion_score)
             self.state = RobotState.VERIFY
+            raise ThreatVerificationTriggered("Threat verification triggered due to high fusion score")
 
         # 3. M7 Logging integration
         event = m7_logging.m7_event_t(
@@ -126,6 +133,12 @@ class DecisionEngine:
                 if self.state == RobotState.NAVIGATE:
                     self.state = RobotState.STOP
                     
+            except ThreatVerificationTriggered:
+                logger.info("[DECISION] Navigation paused for threat verification.")
+                # self.state has already been set to RobotState.VERIFY in _on_snapshot
+            except ObstacleBlockedError as e:
+                logger.error("[DECISION] Navigation blocked: %s. Initiating abort.", e)
+                self.state = RobotState.STOP
             except Exception as e:
                 logger.error("[DECISION] Navigation failed: %s", e)
                 self.state = RobotState.STOP
