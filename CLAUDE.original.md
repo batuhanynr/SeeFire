@@ -19,20 +19,19 @@ The main deviation is navigation:
 | ID | Module | Current Status | Notes |
 |---|---|---|---|
 | M1 | Chassis & Mechanics | Hardware-only | No Python implementation. |
-| M2 | Motor Control & Power | Implemented | L298N drive, alarm I/O, battery voltage read, encoder-backed distance API, `cleanup()` with GPIO release, `SEEFIRE_FORCE_MOCK` env var, mock mode. 5 tests. |
-| M3 | Sensor Integration | Implemented | MQ-2, MLX90614 (raw SMBus, no adafruit dependency), HC-SR04 x3 (`left/front/right`), median-filtered nav reads, deterministic mock RNG, `SEEFIRE_FORCE_MOCK` env var, full GPIO cleanup, mock mode. 6 tests. |
-| M4 | Vision | Partially implemented | Camera open/close, frame capture, background `_update_loop` thread, obstacle turn-direction hint (Canny edge). Fire/smoke YOLOv8n inference pipeline not integrated yet (placeholder). 0 tests. |
-| M5 | Navigation | Implemented | Waypoint-driven sector traversal, obstacle bypass redesign (wall-hit retreat, forward-pass acquire/release, 4-direction midpoint scan, encoder rollback via `_drive_lateral`), sütun-uyumlu position correction, median-filtered D₀, offline simülatör (`m5_navigation/sim/`). 13 tests. |
-| M6 | Decision Engine | Implemented | FSM with 5 states (`INIT → NAVIGATE → VERIFY → ALARM → STOP`). Fusion score (`_calculate_fusion_score` with config weights). `_on_snapshot` callback for M7 logging + state transitions. Battery health monitoring. Wired into `main.py`. 0 tests. |
-| M7 | Logging & Output | Implemented | SQLite (WAL mode, thread-safe), event logging, JSON map save/load with atomic write (`os.replace`), JPEG snapshot persistence (`event_id_timestamp.jpg`). 14 tests. |
+| M2 | Motor Control & Power | Implemented | L298N drive, alarm I/O, battery voltage read, encoder-backed distance API, mock mode. |
+| M3 | Sensor Integration | Implemented | MQ-2, MLX90614, HC-SR04 x3 (`left/front/right`), median-filtered nav reads, mock mode. |
+| M4 | Vision | Partially implemented | Camera open/close, frame capture, obstacle turn-direction hint. Fire/smoke inference pipeline is not integrated yet. |
+| M5 | Navigation | Implemented | Sector traversal on static route, midpoint/waypoint snapshot hooks, obstacle bypass, start verification. |
+| M6 | Decision Engine | Not implemented | `m6_decision` is still a placeholder; no live FSM loop yet. |
+| M7 | Logging & Output | Implemented | SQLite event log, JSON save/load helpers, JPEG snapshot persistence. |
 
 ## Runtime Reality
 
-- `main.py` initializes `M7 -> M2 -> M3 -> M4`, then starts `DecisionEngine.start()` (M6 FSM loop).
-- M6 FSM calls `NavigationController.run()` under the hood — M5 is wired via M6.
-- M4 YOLOv8n inference is still a placeholder (`mock_fire=0.0, mock_smoke=0.0` in `_update_loop`).
+- `main.py` currently initializes `M7 -> M2 -> M3 -> M4`.
+- `M5` can be exercised independently from Python, but is not yet wired into `main.py`.
+- `M6` is not yet wired because the decision engine has not been implemented.
 - Persistent files default to `runtime_data/` inside the repo unless `SEEFIRE_DATA_DIR` is set.
-- `SEEFIRE_FORCE_MOCK=1` env var forces mock mode even when RPi.GPIO is available.
 
 ## Sensor and Motion Model
 
@@ -59,7 +58,7 @@ Mock mode is intentional and part of the development workflow.
 
 When documents disagree, use this order:
 
-1. Live Python code under `m2_motor/`, `m3_sensors/`, `m4_vision/`, `m5_navigation/`, `m6_decision/`, `m7_logging/`
+1. Live Python code under `m2_motor/`, `m3_sensors/`, `m4_vision/`, `m5_navigation/`, `m7_logging/`
 2. `config.py`
 3. This file
 4. `docs/nelerdegisti.md`
@@ -67,7 +66,6 @@ When documents disagree, use this order:
 
 ## Immediate Gaps
 
-- M4 fire/smoke inference is still pending (YOLOv8n placeholder in `vision.py:75-76`).
-- M6 FSM is implemented but has 0 tests.
-- `m6_decision/tests/` directory is empty.
+- M6 FSM and alarm orchestration are still pending.
+- M4 fire/smoke inference is still pending.
 - Several legacy `.h` files and old README sections still describe the original explore/patrol architecture; update them cautiously and prefer Python behavior over header drafts.

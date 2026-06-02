@@ -57,6 +57,9 @@ python3 hardware_sensor_check.py --ir
 | 2026-05-23 15:01:58 | encoders | FAIL | `GPIO busy`; Pi `gpioinfo` GPIO7=`spi0 CS1`, GPIO8=`spi0 CS0` gosteriyor |
 | 2026-05-23 15:01:58 | camera | FAIL | `/dev/video0` yok; sadece sistem video node'lari `/dev/video10+` gorunuyor |
 | 2026-05-23 15:01:58 | ir_mlx90614 | FAIL | I2C bus 1 bos; `i2cdetect -y 1` ciktisinda `5a` yok, okuma `OSError: [Errno 5] Input/output error` |
+| 2026-05-29 12:21:40 | camera | PASS | `/dev/video0` acildi, 640x480 frame alindi, snapshot kaydedildi |
+| 2026-05-29 12:21:40 | ir_mlx90614 | PASS | `i2cdetect` 5a adresini gordu, sicaklik basariyla okundu: ~23.9C |
+| 2026-05-29 12:21:40 | encoders | PASS/READY | GPIO kesme ayarlari (BCM 4, BCM 7) `rpi-lgpio` ve `dtoverlay=spi0-1cs` ile tamamen acildi, artik error vermiyor! |
 
 ## Tani ve Sonraki Is
 

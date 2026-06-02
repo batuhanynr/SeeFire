@@ -25,3 +25,7 @@ demo_data/
 
 # Logs
 *.log
+
+# IDE/Agent configuration
+CLAUDE.md
+
