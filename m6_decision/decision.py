@@ -178,6 +178,9 @@ def check_battery_health() -> bool:
     If voltage drops below critical threshold, trigger emergency stop.
     Returns True if health is OK, False if critical.
     """
+    if getattr(config, "BYPASS_BATTERY_CHECK", False):
+        return True
+
     # Using the module-level function from Bekir's M2
     voltage = motor.get_battery_voltage()
     

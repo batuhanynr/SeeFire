@@ -56,17 +56,18 @@ class TestDecisionEngine(unittest.TestCase):
 
     @patch("m2_motor.motor.get_battery_voltage")
     def test_battery_health_states(self, mock_get_voltage):
-        # Case 1: Voltage OK
-        mock_get_voltage.return_value = 7.4
-        self.assertTrue(check_battery_health())
+        with patch.object(config, "BYPASS_BATTERY_CHECK", False):
+            # Case 1: Voltage OK
+            mock_get_voltage.return_value = 7.4
+            self.assertTrue(check_battery_health())
 
-        # Case 2: Voltage Low but OK to continue
-        mock_get_voltage.return_value = 6.6
-        self.assertTrue(check_battery_health())
+            # Case 2: Voltage Low but OK to continue
+            mock_get_voltage.return_value = 6.6
+            self.assertTrue(check_battery_health())
 
-        # Case 3: Voltage Critical (Emergency Stop)
-        mock_get_voltage.return_value = 6.2
-        self.assertFalse(check_battery_health())
+            # Case 3: Voltage Critical (Emergency Stop)
+            mock_get_voltage.return_value = 6.2
+            self.assertFalse(check_battery_health())
 
     def test_init_transitions_to_navigate(self):
         engine = DecisionEngine()

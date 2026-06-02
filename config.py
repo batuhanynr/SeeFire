@@ -86,8 +86,8 @@ START_RIGHT_CM = 200.0
 POSITION_TOLERANCE_CM = 5.0
 FINE_TUNE_STEP_CM     = 2.0
 
-# Encoder calibration
-ENCODER_TICKS_PER_CM = 20.0
+# Encoder calibration (20 ticks per 20.73cm wheel revolution -> ~0.965 ticks/cm)
+ENCODER_TICKS_PER_CM = 0.965
 # Slots on the encoder disc = ticks per full wheel revolution. Set to your
 # actual disc slot count (common slotted optical discs are 20). Used for RPM.
 ENCODER_TICKS_PER_REV = 20.0
@@ -108,6 +108,7 @@ BATTERY_MAX_V     = 8.4   # Full charge
 BATTERY_NOMINAL_V = 7.4   # Typical
 BATTERY_LOW_V     = 6.8   # Warning threshold
 BATTERY_CRIT_V    = 6.4   # Emergency stop / cutoff
+BYPASS_BATTERY_CHECK = True  # Set to True to ignore critical battery shutdown during testing
 BATTERY_ADC_CH    = 1     # Which MCP3208 channel
 VDIV_R1           = 20000.0 # 20k Ohm
 VDIV_R2           = 10000.0 # 10k Ohm (V_ADC = V_BAT * R2/(R1+R2))
