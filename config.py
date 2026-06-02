@@ -29,7 +29,7 @@ MQ2_CS_PIN = 5
 MQ2_ADC_CH = 0
 
 # Wheel Encoders (single-channel pulse counting; direction inferred from motor command)
-ENCODER_LEFT_PIN = 4
+ENCODER_LEFT_PIN = 6
 ENCODER_RIGHT_PIN = 7
 
 # Alarm Outputs (M2/M6)
@@ -75,6 +75,13 @@ FINE_TUNE_STEP_CM     = 2.0
 
 # Encoder calibration
 ENCODER_TICKS_PER_CM = 20.0
+# Slots on the encoder disc = ticks per full wheel revolution. Set to your
+# actual disc slot count (common slotted optical discs are 20). Used for RPM.
+ENCODER_TICKS_PER_REV = 20.0
+# Wheel diameter (mm). With ticks-per-rev gives true speed: one rev advances
+# pi*diameter. (Note: ENCODER_TICKS_PER_CM above is a separate calibration and
+# does not match this geometry; speed calc uses diameter + ticks-per-rev.)
+WHEEL_DIAMETER_MM = 66.0
 
 # Drive parameters
 DRIVE_SPEED = 60   # PWM duty cycle 0-100 for forward

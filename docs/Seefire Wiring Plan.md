@@ -20,9 +20,9 @@ PIN_IN4 = 22      # Sağ motor yön B
 PIN_ENA = 12      # Sol motor PWM (hardware PWM)
 PIN_ENB = 13      # Sağ motor PWM (hardware PWM)
 
-# ── Teker Enkoderleri (2 adet — RL ve RR motorları) ──────────────
-PIN_ENC_LEFT  = 4   # Sol enkoder sinyal (RL motoru)
-PIN_ENC_RIGHT = 7   # Sağ enkoder sinyal (RR motoru)
+# ── Teker Enkoderleri (2 adet — FL ve FR motorları) ──────────────
+PIN_ENC_LEFT  = 6   # Sol enkoder sinyal (FL motoru) — BCM 6 (Pin 31)
+PIN_ENC_RIGHT = 7   # Sağ enkoder sinyal (FR motoru) — BCM 7 (Pin 26)
 # VCC: 3.3V  |  GND: GND  |  Sinyal: 3.3V uyumlu (bölücü yok)
 
 # ── HC-SR04 Ultrasonik Sensörler ─────────────────────────────────
@@ -73,7 +73,7 @@ PIN_BUZZER = 19   # Aktif buzzer (Pin 35)
 | 4          | —        | OUT   | LM2596 OUT+ bağlantısı     | 5V güç (Pi besleme) |
 | 5          | GPIO3    | I/O   | MLX90614 SCL               | I²C          |
 | 6          | —        | GND   | Fan (−), genel GND         | —            |
-| 7          | GPIO4    | IN    | Enkoder sol (RL motoru)    | Dijital      |
+| 7          | GPIO4    | IN    | Serbest                    | Dijital      |
 | 9          | —        | GND   | MLX90614 GND               | —            |
 | 11         | GPIO17   | OUT   | L298N IN1 — sol yön A      | Dijital      |
 | 12         | GPIO18   | OUT   | L298N IN2 — sol yön B      | Dijital      |
@@ -89,8 +89,9 @@ PIN_BUZZER = 19   # Aktif buzzer (Pin 35)
 | 22         | GPIO25   | OUT   | HC-SR04 sağ TRIG           | Dijital      |
 | 23         | GPIO11   | OUT   | MCP3008 CLK (SCLK)         | SPI          |
 | 25         | —        | GND   | Genel GND                  | —            |
-| 26         | GPIO7    | IN    | Enkoder sağ (RR motoru)    | Dijital      |
+| 26         | GPIO7    | IN    | Enkoder sağ (FR motoru)    | Dijital      |
 | 29         | GPIO5    | OUT   | MCP3008 CS/SHDN            | SPI (yazılımsal CS) |
+| 31         | GPIO6    | IN    | Enkoder sol (FL motoru)    | Dijital      |
 | 32         | GPIO12   | OUT   | L298N ENA — sol PWM        | PWM (1kHz)   |
 | 33         | GPIO13   | OUT   | L298N ENB — sağ PWM        | PWM (1kHz)   |
 | 34         | —        | GND   | Buzzer (−)                 | —            |
@@ -99,14 +100,16 @@ PIN_BUZZER = 19   # Aktif buzzer (Pin 35)
 | 37         | GPIO26   | OUT   | Alarm LED (330Ω seri)      | Dijital      |
 | 38         | GPIO20   | OUT   | HC-SR04 sol TRIG           | Dijital      |
 | 40         | GPIO21   | IN    | HC-SR04 sağ ECHO (bölücüden)| Dijital     |
+| 40         | —        | GND   | Fan Kırmızı (+)            | 5V güç       |
+| 40         | —        | GND   | Fan Siyah (−)              | —            |
 
 ### Boşta Kalan GPIO Pinleri
 
 | Header Pin | BCM GPIO | Not                          |
 |:----------:|:--------:|------------------------------|
+| 7          | GPIO4    | Serbest                      |
 | 27         | GPIO0    | I²C ID EEPROM — dokunma      |
 | 28         | GPIO1    | I²C ID EEPROM — dokunma      |
-| 31         | GPIO6    | Serbest                      |
 | 24         | GPIO8    | SPI CE0 — sensör için kullanma |
 
 ---
@@ -197,8 +200,8 @@ HC-SR04 ECHO (5V)
 
 | Enkoder       | Motor | GPIO    | Header Pin | VCC   |
 |---------------|:-----:|:-------:|:----------:|:-----:|
-| Sol enkoder   | RL    | GPIO4   | Pin 7      | 3.3V  |
-| Sağ enkoder   | RR    | GPIO7   | Pin 26     | 3.3V  |
+| Sol enkoder   | FL    | GPIO6   | Pin 31     | 3.3V  |
+| Sağ enkoder   | FR    | GPIO7   | Pin 26     | 3.3V  |
 
 - Enkoder sinyali 3.3V uyumlu — voltaj bölücü yok
 - Yazılımda interrupt tabanlı sayım (`GPIO.RISING` edge)

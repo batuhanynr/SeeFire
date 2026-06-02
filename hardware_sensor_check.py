@@ -72,20 +72,52 @@ def check_encoders(duration: float) -> CheckResult:
     GPIO.add_event_detect(config.ENCODER_LEFT_PIN, GPIO.RISING, callback=on_left, bouncetime=2)
     GPIO.add_event_detect(config.ENCODER_RIGHT_PIN, GPIO.RISING, callback=on_right, bouncetime=2)
 
+    ticks_per_rev = config.ENCODER_TICKS_PER_REV
+    ticks_per_cm = config.ENCODER_TICKS_PER_CM
+
     print(
         f"Spin wheels by hand now. Left GPIO{config.ENCODER_LEFT_PIN}, "
-        f"right GPIO{config.ENCODER_RIGHT_PIN}. Waiting {duration:.0f}s..."
+        f"right GPIO{config.ENCODER_RIGHT_PIN}. Live RPM for {duration:.0f}s..."
     )
-    time.sleep(duration)
 
+    # Live sampling loop: instantaneous wheel RPM + speed per side.
+    sample_dt = 0.5
+    end = time.monotonic() + duration
+    last_t = time.monotonic()
+    last_l = 0
+    last_r = 0
+    peak_l_rpm = 0.0
+    peak_r_rpm = 0.0
     try:
-        GPIO.remove_event_detect(config.ENCODER_LEFT_PIN)
-        GPIO.remove_event_detect(config.ENCODER_RIGHT_PIN)
+        while time.monotonic() < end:
+            time.sleep(sample_dt)
+            now = time.monotonic()
+            dt = now - last_t
+            dl = left_ticks - last_l
+            dr = right_ticks - last_r
+            l_rpm = (dl / ticks_per_rev) / dt * 60.0
+            r_rpm = (dr / ticks_per_rev) / dt * 60.0
+            l_cms = (dl / ticks_per_cm) / dt
+            r_cms = (dr / ticks_per_cm) / dt
+            peak_l_rpm = max(peak_l_rpm, l_rpm)
+            peak_r_rpm = max(peak_r_rpm, r_rpm)
+            print(
+                f"  L: {l_rpm:6.1f} rpm {l_cms:6.1f} cm/s (ticks {left_ticks:<6}) | "
+                f"R: {r_rpm:6.1f} rpm {r_cms:6.1f} cm/s (ticks {right_ticks:<6})"
+            )
+            last_t, last_l, last_r = now, left_ticks, right_ticks
     finally:
-        GPIO.cleanup((config.ENCODER_LEFT_PIN, config.ENCODER_RIGHT_PIN))
+        try:
+            GPIO.remove_event_detect(config.ENCODER_LEFT_PIN)
+            GPIO.remove_event_detect(config.ENCODER_RIGHT_PIN)
+        finally:
+            GPIO.cleanup((config.ENCODER_LEFT_PIN, config.ENCODER_RIGHT_PIN))
 
     ok = left_ticks > 0 and right_ticks > 0
-    detail = f"left_ticks={left_ticks}, right_ticks={right_ticks}"
+    detail = (
+        f"left_ticks={left_ticks}, right_ticks={right_ticks}, "
+        f"peak_left={peak_l_rpm:.1f}rpm, peak_right={peak_r_rpm:.1f}rpm"
+    )
     if not ok:
         detail += "; expected both > 0 while wheels spin"
     return CheckResult("encoders", ok, detail)
@@ -130,8 +162,9 @@ def check_camera(device: int, snapshot_path: str) -> CheckResult:
 def check_ir() -> CheckResult:
     detect_detail = ""
     try:
+        i2c_cmd = "/usr/sbin/i2cdetect" if os.path.exists("/usr/sbin/i2cdetect") else "i2cdetect"
         proc = subprocess.run(
-            ["i2cdetect", "-y", str(config.I2C_BUS)],
+            [i2c_cmd, "-y", str(config.I2C_BUS)],
             text=True,
             capture_output=True,
             timeout=10,
@@ -370,7 +403,7 @@ def main() -> int:
     parser.add_argument("--alarm", action="store_true", help="Run LED/buzzer output check")
     parser.add_argument("--fusion", action="store_true", help="Run M3 fusion read through module")
     parser.add_argument("--motor-safe", action="store_true", help="Run safe L298N GPIO/PWM test without wheel motion")
-    parser.add_argument("--encoder-seconds", type=float, default=10.0)
+    parser.add_argument("--encoder-seconds", type=float, default=5.0)
     parser.add_argument("--camera-device", type=int, default=0)
     parser.add_argument("--snapshot", default="runtime_data/snapshots/hardware_camera_check.jpg")
     args = parser.parse_args()
