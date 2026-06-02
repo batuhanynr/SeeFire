@@ -410,3 +410,48 @@ git push origin main
 - `python3 -m pytest -v` → **34/34 PASSED** (tüm modüller)
 - `main` remote'a pushlandı: `4eb865c..3766560 main -> main`
 - Çalışmayan eski branch'ler temizlendi
+
+---
+
+## Tarih: 2 Haziran 2026 — Repo Temizliği + M2/M3 İyileştirmeleri
+**Geliştirici:** Bekir Emre Sarıpınar & Claude
+
+### Yapılan
+
+**Repo temizliği:**
+- `__pycache__/` dosyaları git index'inden kaldırıldı (15 dosya). `.gitignore` zaten `__pycache__/` içeriyordu ama önceden track edilmişti.
+- `config_updater.py` silindi — tek kullanımlık DHT22/MPU6050 temizleme script'i, artık gerekmiyor.
+- `demo.py` güncellendi — çalışmayan eski API çağrıları (`read_mq2()`, `read_mlx90614()`, `read_dht22()`, `read_hcsr04()`, `read_mpu6050_yaw()`) kaldırıldı, yerine mevcut API (`get_fusion_sensors()`, `get_navigation_sensors()`, `get_navigation_sensors_filtered()`) kullanıldı.
+
+**M3 Sensor Integration iyileştirmeleri:**
+
+| Değişiklik | Detay | Dosya |
+|---|---|---|
+| MLX90614 hata yönetimi | `except Exception: pass` → `except Exception as e: logger.warning(...)` + `_mlx_sensor = None` | `m3_sensors/sensors.py:175` |
+| Sensor disable mantığı | Hata sonrası `_mlx_sensor = None` → sonraki fusion okumalarda IR sensörü tekrar denenmez, 25.0°C fallback kullanılır | `m3_sensors/sensors.py:177` |
+| Ultrasonik GPIO cleanup | `cleanup()` artık SPI/I2C'ye ek olarak TRIG/ECHO pinleri ve MQ2_CS_PIN için `GPIO.cleanup()` çağırıyor | `m3_sensors/sensors.py:206-218` |
+| Mock ultrasonik deterministic | `random.uniform(15, 45)` → `_RNG.uniform(15, 45)` (seed=42 ile `random.Random` instance). Testlerde aynı sıra garanti. | `m3_sensors/sensors.py:141` |
+
+**M2 Motor Control iyileştirmeleri:**
+
+| Değişiklik | Detay | Dosya |
+|---|---|---|
+| `cleanup()` metodu | PWM stop + `GPIO.cleanup(pin_list)` ile tüm M2 pin'lerini serbest bırakır. Mock modda hiçbir şey yapmaz. Idempotent. | `m2_motor/motor.py:183-199` |
+| Lazy logger | 3 adet `f"..."` → `"%s"` formatı (`motor_drive`, `motor_turn`, `set_alarm`). Debug seviyesindeki bu loglar Pi'de CPU israfı yapmaz. | `m2_motor/motor.py:138,160,218` |
+| `cleanup` export | `__init__.py` import ve `__all__` listesine eklendi. | `m2_motor/__init__.py` |
+| Signal handler güncellemesi | `main.py:signal_handler`'a `motor.cleanup()` çağrısı eklendi (M2 pin'leri motor stop'tan sonra temizlenir). | `main.py:40` |
+
+**Yeni testler:**
+
+| Test | Modül | Doğruladığı |
+|---|---|---|
+| `test_cleanup_safe_in_mock` | M2 | `cleanup()` mock modda güvenli, iki kere çağrılabilir, `_initialized` değişmez |
+| `test_mlx_failure_disables_sensor` | M3 | MLX okuma hatası → `_mlx_sensor = None`, ir_temp = 25.0 fallback |
+| `test_mlx_failure_stays_disabled` | M3 | `_mlx_sensor = None` iken `_read_mlx90614_celsius` çağrılmaz, direkt 25.0 döner |
+| `test_mock_ultrasonic_deterministic` | M3 | Seed'li RNG ile aynı girdiler her seferinde aynı değeri üretir |
+
+### Doğrulama
+- `python3 -m pytest -v` → **38/38 PASSED** (+4 yeni test)
+- `demo.py` çalışıyor: M7 logging + M3 sensor mock demo başarılı
+- `main` remote'a pushlandı: `3766560..5b62c1e main -> main`
+- Repo temiz: `__pycache__` track edilmiyor, `config_updater.py` yok, `demo.py` güncel API kullanıyor
