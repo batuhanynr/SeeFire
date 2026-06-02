@@ -27,5 +27,5 @@ demo_data/
 *.log
 
 # IDE/Agent configuration
-CLAUDE.md
+# CLAUDE.md is intentionally tracked — contains project architecture docs
 
