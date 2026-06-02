@@ -1,6 +1,6 @@
 """
 M2 Motor Control & Power Implementation
-Handles physical actuators: L298N driver, Alarm LED, Buzzer, Battery Voltage,
+Handles physical actuators: L298N ×2 drivers (front+rear, parallel GPIO), Alarm LED, Buzzer, Battery Voltage,
 and wheel-encoder distance tracking for waypoint navigation (M5).
 Supports Mock Mode for development without physical robot.
 """
@@ -27,7 +27,7 @@ class MotorM2:
     """
     Motor control class for SeeFire robot.
     
-    Movement Pin Logic (L298N):
+    Movement Pin Logic (L298N ×2, parallel GPIO signals to both drivers):
     - Forward:  IN1=HIGH, IN2=LOW  (Left)  | IN3=HIGH, IN4=LOW  (Right)
     - Backward: IN1=LOW,  IN2=HIGH (Left)  | IN3=LOW,  IN4=HIGH (Right)
     - Turn Right: IN1=HIGH, IN2=LOW (Left) | IN3=LOW,  IN4=HIGH (Right)
@@ -72,7 +72,7 @@ class MotorM2:
             GPIO.setup(pin, GPIO.OUT)
             GPIO.output(pin, GPIO.LOW)
 
-        # L298N PWM initialization (~1 kHz)
+        # L298N ×2 PWM initialization (~1 kHz) — parallel signal to both drivers
         self.pwm_a = GPIO.PWM(config.MOTOR_ENA, 1000)
         self.pwm_b = GPIO.PWM(config.MOTOR_ENB, 1000)
         self.pwm_a.start(0)

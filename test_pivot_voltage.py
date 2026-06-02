@@ -7,7 +7,7 @@ hem ekrana basar hem de CSV dosyasına kaydeder.
 
 TEŞHIS YORUMU:
   - Voltaj 6.0V altına düşerse → AKÜ yetersiz (zayıf pil veya ince kablo)
-  - Voltaj 6.0V üzerinde kalıyorsa → L298N yetersiz (sürücü kaybı)
+  - Voltaj 6.0V üzerinde kalıyorsa → L298N yetersiz (artık 2× L298N kullanılıyor, kablo bağlantılarını kontrol et)
 
 Çalıştırma (Pi'de):
   python3 test_pivot_voltage.py          # sağa pivot dönüş (varsayılan)
@@ -165,8 +165,8 @@ def run_test(direction: str, speed: int, duration: float, csv_path: str):
         print("     → Çözüm: Yeni/dolu akü veya daha kalın kablo.")
     elif max_drop > 0.5:
         print("  🟡 TANI: Voltaj düştü ama kritik seviyenin üstünde kaldı.")
-        print("     → L298N'de voltaj kaybı yaşanıyor.")
-        print("     → Çözüm: BTS7960 veya 2x L298N ile değiştir.")
+        print("     → L298N ×2'de voltaj kaybı yaşanıyor.")
+        print("     → 2× L298N (ön+arka) paralel sinyal ile bağlı — kablo bağlantılarını kontrol et.")
     else:
         print("  🟢 TANI: Voltaj kararlı kaldı.")
         print("     → Güç sorunu değil, mekanik sürtünme olabilir.")

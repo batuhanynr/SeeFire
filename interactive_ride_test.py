@@ -17,9 +17,9 @@ Controls (hold-to-move / tank drive):
       steer alone           -> in-place rotation (sides spin opposite)
 
 Hardware note:
-    The chassis has 4 physical motors, but the L298N wiring drives them as
-    two channels: left pair (FL+RL) and right pair (FR+RR). This dashboard
-    shows all four wheels, while applying the same PWM to each side pair.
+    The chassis has 4 physical motors driven by two L298N boards (front+rear)
+    with parallel GPIO signals. Motor 1=FL, 2=FR on L298N #1 (front),
+    Motor 3=RL, 4=RR on L298N #2 (rear). Same PWM per side.
 """
 from __future__ import annotations
 
@@ -393,7 +393,7 @@ def draw(stdscr, controller: RideController) -> None:
     stdscr.addstr(14, 2, f"Sol kanal  PWM: {controller.left:6.1f}%   Sag kanal PWM: {controller.right:6.1f}%")
     stdscr.addstr(15, 2, f"Sol Enkoder: {controller.rpm_left:6.1f} rpm  {controller.speed_left:6.1f} cm/s ({controller.speed_left * 0.036:5.2f} km/h) (Tick: {controller.hw.left_ticks:<6})")
     stdscr.addstr(16, 2, f"Sag Enkoder: {controller.rpm_right:6.1f} rpm  {controller.speed_right:6.1f} cm/s ({controller.speed_right * 0.036:5.2f} km/h) (Tick: {controller.hw.right_ticks:<6})")
-    stdscr.addstr(18, 2, f"Teker capi {config.WHEEL_DIAMETER_MM:.0f}mm, {config.ENCODER_TICKS_PER_REV:.0f} tick/tur | FL+RL ve FR+RR ayni L298N kanali.")
+    stdscr.addstr(18, 2, f"Teker capi {config.WHEEL_DIAMETER_MM:.0f}mm, {config.ENCODER_TICKS_PER_REV:.0f} tick/tur | 2x L298N paralel GPIO — On: M1+M2, Arka: M3+M4")
     if controller.log_path is not None:
         stdscr.addstr(19, 2, f"Log (1s): {controller.log_path.name}")
     stdscr.refresh()

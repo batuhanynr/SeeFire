@@ -12,17 +12,21 @@
 #  SeeFire — Donanım Pin Sabitleri (BCM numaralandırması)
 # ════════════════════════════════════════════════════════
 
-# ── Motor Sürücü (L298N) ─────────────────────────────────────────
-PIN_IN1 = 17      # Sol motor yön A
-PIN_IN2 = 18      # Sol motor yön B
-PIN_IN3 = 27      # Sağ motor yön A
-PIN_IN4 = 22      # Sağ motor yön B
-PIN_ENA = 12      # Sol motor PWM (hardware PWM)
-PIN_ENB = 13      # Sağ motor PWM (hardware PWM)
+# ── Motor Sürücüler (L298N ×2 — Ön + Arka, paralel sinyal) ───────
+# Motor 1=FL, Motor 2=FR, Motor 3=RL, Motor 4=RR
+# Ön L298N: Motor 1 (OUT1/2), Motor 2 (OUT3/4)
+# Arka L298N: Motor 3 (OUT1/2), Motor 4 (OUT3/4)
+# Her iki sürücünün IN ve EN pinleri aynı GPIO'ya paralel bağlı.
+PIN_IN1 = 17      # Sol yön A  (Motor 1+3) — her iki L298N IN1'e paralel
+PIN_IN2 = 18      # Sol yön B  (Motor 1+3) — her iki L298N IN2'ye paralel
+PIN_IN3 = 27      # Sağ yön A  (Motor 2+4) — her iki L298N IN3'e paralel
+PIN_IN4 = 22      # Sağ yön B  (Motor 2+4) — her iki L298N IN4'e paralel
+PIN_ENA = 12      # Sol PWM    (Motor 1+3) — her iki L298N ENA'ya paralel (hw PWM)
+PIN_ENB = 13      # Sağ PWM    (Motor 2+4) — her iki L298N ENB'ye paralel (hw PWM)
 
-# ── Teker Enkoderleri (2 adet — FL ve FR motorları) ──────────────
-PIN_ENC_LEFT  = 6   # Sol enkoder sinyal (FL motoru) — BCM 6 (Pin 31)
-PIN_ENC_RIGHT = 7   # Sağ enkoder sinyal (FR motoru) — BCM 7 (Pin 26)
+# ── Teker Enkoderleri (2 adet — Motor 1 ve Motor 2) ──────────────
+PIN_ENC_LEFT  = 6   # Sol enkoder sinyal (Motor 1 / FL) — BCM 6 (Pin 31)
+PIN_ENC_RIGHT = 7   # Sağ enkoder sinyal (Motor 2 / FR) — BCM 7 (Pin 26)
 # VCC: 3.3V  |  GND: GND  |  Sinyal: 3.3V uyumlu (bölücü yok)
 
 # ── HC-SR04 Ultrasonik Sensörler ─────────────────────────────────
@@ -75,11 +79,11 @@ PIN_BUZZER = 19   # Aktif buzzer (Pin 35)
 | 6          | —        | GND   | Fan (−), genel GND         | —            |
 | 7          | GPIO4    | IN    | Serbest                    | Dijital      |
 | 9          | —        | GND   | MLX90614 GND               | —            |
-| 11         | GPIO17   | OUT   | L298N IN1 — sol yön A      | Dijital      |
-| 12         | GPIO18   | OUT   | L298N IN2 — sol yön B      | Dijital      |
-| 13         | GPIO27   | OUT   | L298N IN3 — sağ yön A      | Dijital      |
+| 11         | GPIO17   | OUT   | L298N ×2 IN1 — sol yön A (paralel)  | Dijital      |
+| 12         | GPIO18   | OUT   | L298N ×2 IN2 — sol yön B (paralel)  | Dijital      |
+| 13         | GPIO27   | OUT   | L298N ×2 IN3 — sağ yön A (paralel)  | Dijital      |
 | 14         | —        | GND   | Genel GND                  | —            |
-| 15         | GPIO22   | OUT   | L298N IN4 — sağ yön B      | Dijital      |
+| 15         | GPIO22   | OUT   | L298N ×2 IN4 — sağ yön B (paralel)  | Dijital      |
 | 16         | GPIO23   | OUT   | HC-SR04 ön TRIG            | Dijital      |
 | 17         | —        | OUT   | Breadboard 3.3V rayı       | 3.3V güç     |
 | 18         | GPIO24   | IN    | HC-SR04 ön ECHO (bölücüden)| Dijital      |
@@ -89,11 +93,11 @@ PIN_BUZZER = 19   # Aktif buzzer (Pin 35)
 | 22         | GPIO25   | OUT   | HC-SR04 sağ TRIG           | Dijital      |
 | 23         | GPIO11   | OUT   | MCP3008 CLK (SCLK)         | SPI          |
 | 25         | —        | GND   | Genel GND                  | —            |
-| 26         | GPIO7    | IN    | Enkoder sağ (FR motoru)    | Dijital      |
+| 26         | GPIO7    | IN    | Enkoder sağ (Motor 2 / FR) | Dijital      |
 | 29         | GPIO5    | OUT   | MCP3008 CS/SHDN            | SPI (yazılımsal CS) |
-| 31         | GPIO6    | IN    | Enkoder sol (FL motoru)    | Dijital      |
-| 32         | GPIO12   | OUT   | L298N ENA — sol PWM        | PWM (1kHz)   |
-| 33         | GPIO13   | OUT   | L298N ENB — sağ PWM        | PWM (1kHz)   |
+| 31         | GPIO6    | IN    | Enkoder sol (Motor 1 / FL) | Dijital      |
+| 32         | GPIO12   | OUT   | L298N ×2 ENA — sol PWM (paralel) | PWM (1kHz)   |
+| 33         | GPIO13   | OUT   | L298N ×2 ENB — sağ PWM (paralel) | PWM (1kHz)   |
 | 34         | —        | GND   | Buzzer (−)                 | —            |
 | 35         | GPIO19   | OUT   | Aktif buzzer (+)           | Dijital      |
 | 36         | GPIO16   | IN    | HC-SR04 sol ECHO (bölücüden)| Dijital     |
@@ -121,29 +125,29 @@ LiPo 2S 7.4V
     │
     ├─ (+) ──→ [Anahtar] ──→ [Sigorta 5-10A] ──→ Breadboard (+) rayı
     │                                                     │
-    │                                        ┌────────────┴────────────┐
-    │                                        │                         │
-    │                                   L298N VS                  LM2596 IN+
-    │                                   (motor güç)               (7.4V giriş)
-    │                                                                   │
-    │                                                            LM2596 OUT+
-    │                                                            (5.00V — kalibreli)
-    │                                                                   │
-    │                                                          Pi Header Pin 4
+    │                                   ┌─────────────────┼─────────────────┐
+    │                                   │                 │                 │
+    │                            L298N #1 VS       L298N #2 VS         LM2596 IN+
+    │                            (ön sürücü)       (arka sürücü)       (7.4V giriş)
+    │                                                                       │
+    │                                                                LM2596 OUT+
+    │                                                                (5.00V — kalibreli)
+    │                                                                       │
+    │                                                              Pi Header Pin 4
     │
     └─ (−) ──→ Breadboard GND rayı (ortak toprak)
                      │
-        ┌────────────┼────────────┬──────────────┐
-        │            │            │              │
-    L298N GND   LM2596 OUT−   Pi Pin 6       Tüm sensör
-                                              GND'leri
+        ┌────────────┼─────────────┬──────────────┬──────────────┐
+        │            │             │              │              │
+    L298N #1 GND  L298N #2 GND  LM2596 OUT−   Pi Pin 6       Tüm sensör
+                                                              GND'leri
 ```
 
 **Güç Rayları (breadboard):**
 
 | Ray       | Kaynak               | Besledikleri                                  |
 |-----------|----------------------|-----------------------------------------------|
-| (+) 7.4V  | LiPo → Anahtar → Sigorta | L298N VS, LM2596 IN+                    |
+| (+) 7.4V  | LiPo → Anahtar → Sigorta | L298N #1 VS, L298N #2 VS, LM2596 IN+   |
 | 5V        | Pi Pin 2 veya Pin 4  | HC-SR04 ×3 VCC, MQ-2 VCC, Fan (+)            |
 | 3.3V      | Pi Pin 1 veya Pin 17 | MLX90614 VCC, MCP3008 VDD+VREF, Enkoder VCC  |
 | GND       | LiPo (−)             | Her şeyin GND'si — ortak toprak               |
@@ -177,31 +181,91 @@ HC-SR04 ECHO (5V)
 
 ## 5. Motor ve Enkoder Bağlantıları
 
-### L298N Motor Çıkışları
+### Motor Tanımları
 
-| L298N Çıkışı | Bağlı Motorlar          | Birleştirme  |
-|:------------:|-------------------------|:------------:|
-| OUT1         | Motor FL (+) + Motor RL (+) | Paralel lehim |
-| OUT2         | Motor FL (−) + Motor RL (−) | Paralel lehim |
-| OUT3         | Motor FR (+) + Motor RR (+) | Paralel lehim |
-| OUT4         | Motor FR (−) + Motor RR (−) | Paralel lehim |
+| Motor No | Pozisyon  | Kısaltma | Sürücü       |
+|:--------:|-----------|:--------:|:------------:|
+| Motor 1  | Ön Sol    | FL       | Ön L298N #1  |
+| Motor 2  | Ön Sağ    | FR       | Ön L298N #1  |
+| Motor 3  | Arka Sol  | RL       | Arka L298N #2 |
+| Motor 4  | Arka Sağ  | RR       | Arka L298N #2 |
 
-### L298N Yön Tablosu (yazılım referansı)
+### Ön L298N (#1) — Motor 1 ve Motor 2
 
-| Hareket     | IN1 | IN2 | IN3 | IN4 |
-|-------------|:---:|:---:|:---:|:---:|
-| İleri       | H   | L   | H   | L   |
-| Geri        | L   | H   | L   | H   |
-| Sol dönüş   | L   | H   | H   | L   |
-| Sağ dönüş  | H   | L   | L   | H   |
-| Dur         | L   | L   | L   | L   |
+| L298N #1 Terminali | Bağlantı                              |
+|:------------------:|---------------------------------------|
+| **OUT1**           | Motor 1 (FL) — tel A                  |
+| **OUT2**           | Motor 1 (FL) — tel B                  |
+| **OUT3**           | Motor 2 (FR) — tel A                  |
+| **OUT4**           | Motor 2 (FR) — tel B                  |
+| **IN1**            | GPIO17 (Pin 11) — sol yön A (paralel) |
+| **IN2**            | GPIO18 (Pin 12) — sol yön B (paralel) |
+| **IN3**            | GPIO27 (Pin 13) — sağ yön A (paralel) |
+| **IN4**            | GPIO22 (Pin 15) — sağ yön B (paralel) |
+| **ENA**            | GPIO12 (Pin 32) — sol PWM (paralel)   |
+| **ENB**            | GPIO13 (Pin 33) — sağ PWM (paralel)   |
+| **VS**             | 7.4V breadboard (+) rayı              |
+| **GND**            | Ortak GND rayı                        |
+| **5V**             | ⚠️ Boşta (bağlama)                   |
+
+### Arka L298N (#2) — Motor 3 ve Motor 4
+
+| L298N #2 Terminali | Bağlantı                              |
+|:------------------:|---------------------------------------|
+| **OUT1**           | Motor 3 (RL) — tel A                  |
+| **OUT2**           | Motor 3 (RL) — tel B                  |
+| **OUT3**           | Motor 4 (RR) — tel A                  |
+| **OUT4**           | Motor 4 (RR) — tel B                  |
+| **IN1**            | GPIO17 (Pin 11) — sol yön A (paralel) |
+| **IN2**            | GPIO18 (Pin 12) — sol yön B (paralel) |
+| **IN3**            | GPIO27 (Pin 13) — sağ yön A (paralel) |
+| **IN4**            | GPIO22 (Pin 15) — sağ yön B (paralel) |
+| **ENA**            | GPIO12 (Pin 32) — sol PWM (paralel)   |
+| **ENB**            | GPIO13 (Pin 33) — sağ PWM (paralel)   |
+| **VS**             | 7.4V breadboard (+) rayı              |
+| **GND**            | Ortak GND rayı                        |
+| **5V**             | ⚠️ Boşta (bağlama)                   |
+
+### Paralel GPIO Sinyal Şeması
+
+Pi'den çıkan 6 sinyal kablosu her iki L298N'e paralel bağlıdır:
+
+```
+Pi GPIO17 (Pin 11) ──┬── L298N #1 IN1  →  Motor 1 (FL) yön A
+                     └── L298N #2 IN1  →  Motor 3 (RL) yön A
+
+Pi GPIO18 (Pin 12) ──┬── L298N #1 IN2  →  Motor 1 (FL) yön B
+                     └── L298N #2 IN2  →  Motor 3 (RL) yön B
+
+Pi GPIO27 (Pin 13) ──┬── L298N #1 IN3  →  Motor 2 (FR) yön A
+                     └── L298N #2 IN3  →  Motor 4 (RR) yön A
+
+Pi GPIO22 (Pin 15) ──┬── L298N #1 IN4  →  Motor 2 (FR) yön B
+                     └── L298N #2 IN4  →  Motor 4 (RR) yön B
+
+Pi GPIO12 (Pin 32) ──┬── L298N #1 ENA  →  Motor 1 (FL) hız
+                     └── L298N #2 ENA  →  Motor 3 (RL) hız
+
+Pi GPIO13 (Pin 33) ──┬── L298N #1 ENB  →  Motor 2 (FR) hız
+                     └── L298N #2 ENB  →  Motor 4 (RR) hız
+```
+
+### L298N Yön Tablosu (yazılım referansı — her iki sürücü için aynı)
+
+| Hareket     | IN1 | IN2 | IN3 | IN4 | Etki                                |
+|-------------|:---:|:---:|:---:|:---:|-------------------------------------|
+| İleri       | H   | L   | H   | L   | Motor 1+3 ileri, Motor 2+4 ileri    |
+| Geri        | L   | H   | L   | H   | Motor 1+3 geri, Motor 2+4 geri      |
+| Sol dönüş   | L   | H   | H   | L   | Motor 1+3 geri, Motor 2+4 ileri     |
+| Sağ dönüş   | H   | L   | L   | H   | Motor 1+3 ileri, Motor 2+4 geri     |
+| Dur         | L   | L   | L   | L   | Tüm motorlar durur                  |
 
 ### Teker Enkoderleri
 
-| Enkoder       | Motor | GPIO    | Header Pin | VCC   |
-|---------------|:-----:|:-------:|:----------:|:-----:|
-| Sol enkoder   | FL    | GPIO6   | Pin 31     | 3.3V  |
-| Sağ enkoder   | FR    | GPIO7   | Pin 26     | 3.3V  |
+| Enkoder       | Motor             | GPIO    | Header Pin | VCC   |
+|---------------|:-----------------:|:-------:|:----------:|:-----:|
+| Sol enkoder   | Motor 1 (FL)      | GPIO6   | Pin 31     | 3.3V  |
+| Sağ enkoder   | Motor 2 (FR)      | GPIO7   | Pin 26     | 3.3V  |
 
 - Enkoder sinyali 3.3V uyumlu — voltaj bölücü yok
 - Yazılımda interrupt tabanlı sayım (`GPIO.RISING` edge)
@@ -327,8 +391,9 @@ Not: GPIO8 (HW CE0) kernel tarafından SPI için tutulabilir.
 |---|-------|
 | 1 | HC-SR04 ECHO pinleri **5V çıkış** üretir. Bölücüsüz GPIO'ya bağlama — Pi yanar. |
 | 2 | LM2596 çıkışını Pi'ye bağlamadan önce multimetreyle **5.00V** olduğunu doğrula. |
-| 3 | L298N üzerindeki **ENA ve ENB jumper'larını çıkar** — yazılım PWM kullanıyor. |
-| 4 | L298N **"5V" terminali boşta** — onboard regülatör kullanılmıyor. |
+| 3 | Her iki L298N üzerindeki **ENA ve ENB jumper'larını çıkar** — yazılım PWM kullanıyor. |
+| 4 | Her iki L298N **"5V" terminali boşta** — onboard regülatör kullanılmıyor. |
+| 11 | İki L298N'in IN/EN pinleri **paralel bağlı** — kablo kopuklarında tek taraf çalışmayı bırakır, kontrol et. |
 | 5 | MLX90614 kablosu **max 20cm** — uzunsa I²C bus kilitlenir. |
 | 6 | MQ-2 açılışta **60 saniye ısınma** bekle — ilk okumalar geçersiz. |
 | 7 | MCP3008 **çentik yukarı** bakacak şekilde takılmalı — ters takılırsa yanar. |
@@ -343,8 +408,16 @@ Not: GPIO8 (HW CE0) kernel tarafından SPI için tutulabilir.
 ```
 [ ] LiPo voltajı ölçüldü (7.0V üzeri)
 [ ] LM2596 çıkışı 5.00V kalibre edildi
-[ ] L298N ENA/ENB jumper'ları çıkarıldı
-[ ] L298N 5V terminali boşta
+[ ] Ön L298N (#1) ENA/ENB jumper'ları çıkarıldı
+[ ] Arka L298N (#2) ENA/ENB jumper'ları çıkarıldı
+[ ] Her iki L298N 5V terminali boşta
+[ ] Motor 1 (FL) → L298N #1 OUT1/OUT2 bağlı
+[ ] Motor 2 (FR) → L298N #1 OUT3/OUT4 bağlı
+[ ] Motor 3 (RL) → L298N #2 OUT1/OUT2 bağlı
+[ ] Motor 4 (RR) → L298N #2 OUT3/OUT4 bağlı
+[ ] 6 sinyal kablosu (IN1-4 + ENA + ENB) her iki L298N'e paralel bağlı
+[ ] Her iki L298N VS → 7.4V rayı bağlı
+[ ] Her iki L298N GND → ortak GND rayı bağlı
 [ ] 3 adet HC-SR04 ECHO bölücü devresi kuruldu ve ~3.18V ölçüldü
 [ ] MCP3008 çentik yönü doğru
 [ ] MLX90614 i2cdetect ile 0x5A adresinde görünüyor

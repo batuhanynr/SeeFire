@@ -7,6 +7,7 @@
  *
  * This header mirrors the live Python module at `m2_motor/motor.py`.
  * It is a documentation header, not a compiled source dependency.
+ * Hardware: 2× L298N (front+rear) with parallel GPIO signals.
  */
 
 #include <stdint.h>
@@ -23,7 +24,7 @@
 #define M2_VDIV_R1_OHM        20000.0f
 #define M2_VDIV_R2_OHM        10000.0f
 
-/* GPIO pin assignments */
+/* GPIO pin assignments — parallel to both L298N drivers */
 #define M2_PIN_IN1            17
 #define M2_PIN_IN2            18
 #define M2_PIN_IN3            27
@@ -33,7 +34,7 @@
 #define M2_PIN_LED            26
 #define M2_PIN_BUZZER         19
 #define M2_PIN_ENC_LEFT       6
-#define M2_PIN_ENC_RIGHT      21
+#define M2_PIN_ENC_RIGHT      7
 
 typedef enum {
     M2_OK            =  0,
