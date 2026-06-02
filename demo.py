@@ -1,10 +1,6 @@
 """
 Quick demo — run on your Mac to see M7 and M3 in action.
-No Raspberry Pi or hardware needed; M3 runs in fallback/mock mode.
-
-NOTE: The M7 section follows the current persistence API. The M3 section is a
-provisional local demo and may need updates from the M3 owner as sensor APIs
-change.
+No Raspberry Pi or hardware needed; all modules run in mock mode.
 """
 import json
 import os
@@ -38,9 +34,9 @@ def demo_m7():
         snapshot_path="",
     )
     row_id = m7_logging.log_event(event)
-    print(f"  [+] Logged INIT event → row id: {row_id}")
+    print(f"  [+] Logged INIT event -> row id: {row_id}")
 
-    for i, etype in enumerate(["EXPLORE", "PATROL", "VERIFY", "ALARM"]):
+    for i, etype in enumerate(["NAVIGATE", "WAYPOINT", "VERIFY", "ALARM"]):
         e = m7_logging.m7_event_t(
             timestamp=f"2026-04-18T10:0{i + 1}:00Z",
             event_type=etype,
@@ -59,19 +55,16 @@ def demo_m7():
     for ev in m7_logging.get_events(event_type="ALARM"):
         print(f"    #{ev['id']} {ev['event_type']}")
 
-    # Map save/load
     sample_map = json.dumps({"grid_size": [40, 40], "resolution": 0.1, "cells": []})
     m7_logging.save_map(sample_map)
     loaded = m7_logging.load_map()
     print(f"\n  [+] Map saved and loaded: {len(json.loads(loaded))} keys")
 
-    # Snapshot
     fake_jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 100
     path = m7_logging.save_snapshot(fake_jpeg, 1)
     size = os.path.getsize(path)
     print(f"  [+] Snapshot saved: {path} ({size} bytes)")
 
-    # Missing map
     os.remove(config.MAP_JSON_PATH)
     print(f"  [+] load_map() after delete: {m7_logging.load_map()}")
 
@@ -83,29 +76,14 @@ def demo_m3():
 
     m3_sensors.init_sensors()
 
-    print(f"\n  MQ-2 ready: {m3_sensors.is_mq2_ready()}")
-
-    smoke = m3_sensors.read_mq2()
-    print(f"  MQ-2 smoke level: {smoke} (mock → 0 because no SPI)")
-
-    ir = m3_sensors.read_mlx90614()
-    print(f"  MLX90614 IR temp: {ir}°C (mock → 25.0 because no I2C)")
-
-    temp, hum = m3_sensors.read_dht22()
-    print(f"  DHT22 temp: {temp}°C, humidity: {hum}% (mock → fallback)")
-
-    dist_l = m3_sensors.read_hcsr04(config.TRIG_LEFT, config.ECHO_LEFT)
-    dist_r = m3_sensors.read_hcsr04(config.TRIG_RIGHT, config.ECHO_RIGHT)
-    print(f"  HC-SR04 left: {dist_l} cm, right: {dist_r} cm (mock → -1.0)")
-
-    yaw = m3_sensors.read_mpu6050_yaw()
-    print(f"  MPU6050 yaw: {yaw}° (mock → 0.0)")
-
     fusion = m3_sensors.get_fusion_sensors()
-    print(f"\n  get_fusion_sensors() → {fusion}")
+    print(f"  Fusion sensors: smoke={fusion.smoke_level}, ir_temp={fusion.ir_temp}C, alert={fusion.smoke_alert}")
 
     nav = m3_sensors.get_navigation_sensors()
-    print(f"  get_navigation_sensors() → {nav}")
+    print(f"  Navigation: left={nav.left_cm:.1f}cm, front={nav.front_cm:.1f}cm, right={nav.right_cm:.1f}cm")
+
+    nav_f = m3_sensors.get_navigation_sensors_filtered(samples=3)
+    print(f"  Filtered nav: left={nav_f.left_cm:.1f}cm, front={nav_f.front_cm:.1f}cm, right={nav_f.right_cm:.1f}cm")
 
 
 if __name__ == "__main__":

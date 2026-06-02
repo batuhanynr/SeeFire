@@ -37,6 +37,7 @@ def init() -> None:
 def signal_handler(sig, frame):
     logger.info("Interrupt received, shutting down...")
     motor.stop()
+    motor.cleanup()
     m3_sensors.cleanup()
     m4_vision.close()
     sys.exit(0)

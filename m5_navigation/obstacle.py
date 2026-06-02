@@ -1,18 +1,33 @@
 """
 M5 Obstacle avoidance.
 
-Strategy (see navigation_modulu.md §7):
-  1. Decide turn direction (camera pixel split → ultrasonic fallback).
-  2. Rotate 90° toward open side.
-  3. Side-pass: step forward while the obstacle-facing side ultrasonic still
-     sees the obstacle's surface; the clearance side depends on turn
-     direction.
-  4. Return to original route line using ENCODER ONLY (no sensors): the
-     accumulated side distance is replayed in reverse.
-  5. Lateral fine-tune via PositionVerifier.
+Bypass strategy (rectangular detour around an obstacle, RIGHT direction):
 
-During side-pass and detour, sector-midpoint snapshot triggers must NOT be
-skipped — the navigation loop owns that check via the shared callback.
+    initial state: facing N, obstacle dead ahead at D₀
+    1. turn right 90°  (face E)
+    2. side-pass east until left_cm > D₀ + Δ        — lateral edge cleared
+    3. turn left  90°  (face N)
+    4. forward-pass north until left_cm > D₀ + Δ    — obstacle now behind us
+    5. turn left  90°  (face W)
+    6. drive west by side-pass distance             — back on route line
+    7. turn right 90°  (face N)                     — continue route
+
+LEFT bypass is symmetric (swap left/right at every step, swap turn directions).
+
+Wall-hit handling: during the side-pass (step 2) the new "forward" sensor is
+`front`; if it drops below WALL_CLEARANCE_CM we've hit the perpendicular
+wall. Robot retreats to the initial detection point, undoes the 90° turn,
+and the caller retries from the opposite side. Two wall hits → abort.
+
+The forward-pass (step 4) is *real* north progress and is preserved in the
+encoder total. Lateral moves (steps 2, 6, and any retreat) roll back the
+encoder per step via `_drive_lateral` so `get_total_distance_cm()` always
+reflects pure north progress — even *during* a bypass. This lets the
+navigation layer trigger a midpoint scan exactly when north progress hits
+the sector midpoint, whether or not the robot is on the route line.
+
+Snapshot-callback fires inside both side-pass and forward-pass loops so
+sector-midpoint scans are never skipped during a detour.
 """
 import logging
 import config
@@ -23,49 +38,126 @@ import m4_vision
 logger = logging.getLogger(__name__)
 
 
+class ObstacleBlockedError(RuntimeError):
+    """Raised when both bypass directions are blocked by walls."""
+
+
 class ObstacleAvoidance:
 
     def __init__(self, position_verifier, midpoint_callback=None):
-        """
-        midpoint_callback: callable(sector_id) → None
-            Invoked on each side-pass step so the main loop can check whether
-            the sector midpoint was crossed during the detour.
-        """
         self._position_verifier = position_verifier
         self._midpoint_callback = midpoint_callback or (lambda _sid: None)
 
-    def avoid(self, sector_id: int) -> None:
-        # Net north-progress during bypass is zero (side out, side back).
-        # Snapshot odometry so the side moves don't pollute it.
-        north_distance_before = m2_motor.get_total_distance_cm()
+    def avoid(self, sector_id: int, reference_distance: float) -> None:
+        """Bypass the obstacle currently in front.
 
+        reference_distance: front_cm at the moment the obstacle was detected.
+        """
         direction = self._decide_direction()
-        logger.info("[OBSTACLE] Bypass direction: %s", direction)
+        logger.info("[OBSTACLE] D0=%.1f cm. Bypass direction: %s",
+                    reference_distance, direction)
 
-        if direction == "RIGHT":
-            m2_motor.turn_right_90()
-            return_first_turn = m2_motor.turn_left_90
-        else:
-            m2_motor.turn_left_90()
-            return_first_turn = m2_motor.turn_right_90
+        result = self._attempt_bypass(sector_id, direction, reference_distance)
 
-        side_distance_cm = self._side_pass(sector_id, direction)
+        if result is None:
+            other = "LEFT" if direction == "RIGHT" else "RIGHT"
+            logger.warning(
+                "[OBSTACLE] %s side blocked by wall. Retrying from %s.",
+                direction, other,
+            )
+            result = self._attempt_bypass(sector_id, other, reference_distance)
+            direction = other
+            if result is None:
+                m2_motor.stop()
+                raise ObstacleBlockedError(
+                    "Both bypass directions blocked by walls."
+                )
 
-        # Return to original heading and route line, encoder only.
-        return_first_turn()                          # face north
-        return_first_turn()                          # face opposite of bypass side (back toward route)
-        m2_motor.drive_distance_cm(side_distance_cm)
-        if direction == "RIGHT":
-            m2_motor.turn_right_90()                 # face north again
-        else:
-            m2_motor.turn_left_90()
-
-        # Side moves should not count as north-progress.
-        m2_motor.set_total_distance_cm(north_distance_before)
-
+        side_distance, _forward_distance = result
+        self._return_to_route(direction, side_distance)
+        # Encoder already reflects only north progress (lateral moves rolled
+        # back per step via _drive_lateral). No final correction needed.
         self._position_verifier.verify_and_correct()
 
     # ------------------------------------------------------------------
+
+    def _attempt_bypass(self, sector_id: int, direction: str,
+                        reference_distance: float):
+        """Run side-pass + forward-pass for one direction.
+
+        Returns (side_distance, forward_distance) on success, or None if the
+        side-pass hit a perpendicular wall (in which case the robot is already
+        retreated to the original detection point, facing north).
+        """
+        # Step 1: turn toward chosen side.
+        if direction == "RIGHT":
+            m2_motor.turn_right_90()
+        else:
+            m2_motor.turn_left_90()
+
+        # Step 2: side-pass laterally.
+        side_distance, wall_hit = self._side_pass(
+            sector_id, direction, reference_distance
+        )
+
+        if wall_hit:
+            self._retreat_from_wall(direction, side_distance)
+            return None
+
+        # Step 3: turn back to north.
+        if direction == "RIGHT":
+            m2_motor.turn_left_90()
+        else:
+            m2_motor.turn_right_90()
+
+        # Step 4: forward-pass north until obstacle is behind us.
+        forward_distance = self._forward_pass_obstacle(
+            sector_id, direction, reference_distance
+        )
+        return side_distance, forward_distance
+
+    def _retreat_from_wall(self, direction: str, traveled: float) -> None:
+        """Drive back along the side axis to the original spot, face north."""
+        logger.info("[OBSTACLE] Retreating %.1f cm after wall hit.", traveled)
+        if direction == "RIGHT":
+            # Currently facing east. Reverse: face west, drive back, face north.
+            m2_motor.turn_left_90()   # E → N
+            m2_motor.turn_left_90()   # N → W
+            if traveled > 0:
+                self._drive_lateral(traveled)
+            m2_motor.turn_right_90()  # W → N
+        else:
+            # Currently facing west.
+            m2_motor.turn_right_90()  # W → N
+            m2_motor.turn_right_90()  # N → E
+            if traveled > 0:
+                self._drive_lateral(traveled)
+            m2_motor.turn_left_90()   # E → N
+
+    def _return_to_route(self, direction: str, side_distance: float) -> None:
+        """After forward-pass: face the side axis, drive back, face north."""
+        if direction == "RIGHT":
+            m2_motor.turn_left_90()                       # N → W
+            self._drive_lateral(side_distance)
+            m2_motor.turn_right_90()                      # W → N
+        else:
+            m2_motor.turn_right_90()                      # N → E
+            self._drive_lateral(side_distance)
+            m2_motor.turn_left_90()                       # E → N
+
+    @staticmethod
+    def _drive_lateral(cm: float) -> None:
+        """Drive without polluting the north-progress odometer.
+
+        The encoder integrates *all* forward driving regardless of heading.
+        During a bypass the robot drives east/west, which would pollute the
+        "how far north have we come?" reading used for sector-midpoint
+        detection. This wraps drive_distance_cm with a save-and-restore so
+        the encoder ignores the lateral move.
+        """
+        before = m2_motor.get_total_distance_cm()
+        m2_motor.drive_distance_cm(cm)
+        m2_motor.set_total_distance_cm(before)
 
     def _decide_direction(self) -> str:
         hint = m4_vision.determine_turn_direction()
@@ -75,21 +167,102 @@ class ObstacleAvoidance:
         reading = m3_sensors.get_navigation_sensors_filtered()
         return "RIGHT" if reading.right_cm > reading.left_cm else "LEFT"
 
-    def _side_pass(self, sector_id: int, direction: str) -> float:
-        """Step forward until the obstacle-facing side sensor reports clear.
-        Returns total cm traveled sideways (encoder integral)."""
-        sensor_attr = "left_cm" if direction == "RIGHT" else "right_cm"
+    def _side_pass(self, sector_id: int, direction: str,
+                   reference_distance: float):
+        """Step sideways until lateral edge of obstacle passes the clearance
+        sensor, or until the perpendicular wall is hit.
+
+        Returns (traveled_cm, wall_hit: bool).
+        """
+        # After RIGHT turn (facing east): left sensor points north → clearance.
+        # After LEFT  turn (facing west): right sensor points north → clearance.
+        clearance_attr = "left_cm" if direction == "RIGHT" else "right_cm"
+        clear_threshold = reference_distance + config.OBSTACLE_CLEARANCE_DELTA_CM
         traveled = 0.0
+
         while True:
             reading = m3_sensors.get_navigation_sensors_filtered(samples=2)
-            if getattr(reading, sensor_attr) > config.OBSTACLE_CLEAR_CM:
-                logger.info("[OBSTACLE] Cleared after %.1f cm side-pass.", traveled)
+            clearance = getattr(reading, clearance_attr)
+            wall = reading.front_cm
+
+            if clearance > clear_threshold:
+                logger.info(
+                    "[OBSTACLE] Side-pass cleared after %.1f cm "
+                    "(%s=%.1f > %.1f).",
+                    traveled, clearance_attr, clearance, clear_threshold,
+                )
+                return traveled, False
+
+            if 0 < wall < config.WALL_CLEARANCE_CM:
+                logger.warning(
+                    "[OBSTACLE] Wall ahead at %.1f cm after %.1f cm side-pass.",
+                    wall, traveled,
+                )
+                return traveled, True
+
+            self._midpoint_callback(sector_id)
+            self._drive_lateral(config.SIDE_STEP_CM)
+            traveled += config.SIDE_STEP_CM
+
+            if traveled > config.SIDE_PASS_SAFETY_CAP_CM:
+                logger.warning(
+                    "[OBSTACLE] Side-pass exceeded %.0f cm — aborting.",
+                    config.SIDE_PASS_SAFETY_CAP_CM,
+                )
+                return traveled, False
+
+    def _forward_pass_obstacle(self, sector_id: int, direction: str,
+                               reference_distance: float) -> float:
+        """Drive north until the obstacle alongside us has been passed.
+
+        Two-phase state machine:
+          A) ACQUIRE — drive forward until the side sensor first sees the
+             obstacle close (reading < D₀ + Δ). Needed because right after
+             the side-pass we are still south of the obstacle's southern
+             edge, so the sensor reads "far".
+          B) RELEASE — keep driving until the side sensor reads "far" again
+             (> D₀ + Δ), meaning the obstacle's northern edge is behind us.
+
+        After a RIGHT side-pass + turn-back-to-north, the obstacle sits to
+        our WEST → check left_cm. After LEFT → check right_cm.
+        """
+        side_attr = "left_cm" if direction == "RIGHT" else "right_cm"
+        threshold = reference_distance + config.OBSTACLE_CLEARANCE_DELTA_CM
+        traveled = 0.0
+        acquired = False
+
+        while True:
+            reading = m3_sensors.get_navigation_sensors_filtered(samples=2)
+            side = getattr(reading, side_attr)
+
+            if not acquired and side < threshold:
+                acquired = True
+                logger.info(
+                    "[OBSTACLE] Forward-pass acquired obstacle at %.1f cm "
+                    "(%s=%.1f).", traveled, side_attr, side,
+                )
+            elif acquired and side > threshold:
+                logger.info(
+                    "[OBSTACLE] Forward-pass released after %.1f cm "
+                    "(%s=%.1f > %.1f).",
+                    traveled, side_attr, side, threshold,
+                )
+                return traveled
+
+            if 0 < reading.front_cm < config.WALL_CLEARANCE_CM:
+                logger.warning(
+                    "[OBSTACLE] North wall reached during forward-pass at "
+                    "%.1f cm — stopping.", traveled,
+                )
                 return traveled
 
             self._midpoint_callback(sector_id)
-            m2_motor.drive_distance_cm(config.SIDE_STEP_CM)
-            traveled += config.SIDE_STEP_CM
+            m2_motor.drive_distance_cm(config.STEP_DISTANCE_CM)
+            traveled += config.STEP_DISTANCE_CM
 
-            if traveled > 200.0:  # safety cap
-                logger.warning("[OBSTACLE] Side-pass exceeded 200 cm — aborting.")
+            if traveled > config.FORWARD_PASS_SAFETY_CAP_CM:
+                logger.warning(
+                    "[OBSTACLE] Forward-pass exceeded %.0f cm — aborting.",
+                    config.FORWARD_PASS_SAFETY_CAP_CM,
+                )
                 return traveled

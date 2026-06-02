@@ -12,6 +12,8 @@ to ultrasonic-only logic.
 """
 import logging
 import os
+import threading
+import time
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -28,6 +30,11 @@ except ImportError:
 class VisionM4:
     def __init__(self):
         self._capture = None
+        self._lock = threading.Lock()
+        self._current_frame = None
+        self._yolo_result = {"fire_conf": 0.0, "smoke_conf": 0.0}
+        self._running = False
+        self._thread = None
 
     def init(self) -> bool:
         if not CV_AVAILABLE:
@@ -36,22 +43,56 @@ class VisionM4:
         try:
             self._capture = cv2.VideoCapture(0)
             self._capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-            self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-            # Warm-up: discard first few frames (auto-exposure settling)
-            for _ in range(5):
+            # Low res (320x240) for INT8 YOLO speed on Pi
+            self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+            self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
+            # Warm-up
+            for _ in range(3):
                 self._capture.read()
-            logger.info("M4 Vision camera opened.")
+            
+            # Start background thread
+            self._running = True
+            self._thread = threading.Thread(target=self._update_loop, daemon=True)
+            self._thread.start()
+            
+            logger.info("M4 Vision camera and background thread started.")
         except Exception as e:
             logger.error("Camera open failed: %s", e)
             self._capture = None
         return True
 
+    def _update_loop(self):
+        """Background thread to capture frames and run YOLO inference."""
+        while self._running:
+            if self._capture is None:
+                time.sleep(0.5)
+                continue
+                
+            ok, frame = self._capture.read()
+            if ok:
+                # YOLOv8n inference placeholder (for Faz 1 mock)
+                # In real HW, this is where we'd call the model
+                mock_fire = 0.0
+                mock_smoke = 0.0
+                
+                with self._lock:
+                    self._current_frame = frame
+                    self._yolo_result = {"fire_conf": mock_fire, "smoke_conf": mock_smoke}
+            
+            # Target ~3-5 FPS to avoid overheating Pi
+            time.sleep(0.2)
+
     def capture_frame(self):
-        if not CV_AVAILABLE or self._capture is None:
+        """Returns the most recent frame from the background thread (thread-safe)."""
+        if not CV_AVAILABLE:
             return None
-        ok, frame = self._capture.read()
-        return frame if ok else None
+        with self._lock:
+            return self._current_frame.copy() if self._current_frame is not None else None
+
+    def get_fire_confidence(self) -> float:
+        """Returns the latest YOLO fire confidence (thread-safe)."""
+        with self._lock:
+            return self._yolo_result["fire_conf"]
 
     def determine_turn_direction(self, frame=None) -> Optional[str]:
         """
@@ -83,6 +124,9 @@ class VisionM4:
         return "RIGHT" if right_gap > left_gap else "LEFT"
 
     def close(self) -> None:
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=1.0)
         if CV_AVAILABLE and self._capture is not None:
             self._capture.release()
             self._capture = None
@@ -91,5 +135,6 @@ class VisionM4:
 _instance = VisionM4()
 init = _instance.init
 capture_frame = _instance.capture_frame
+get_fire_confidence = _instance.get_fire_confidence
 determine_turn_direction = _instance.determine_turn_direction
 close = _instance.close

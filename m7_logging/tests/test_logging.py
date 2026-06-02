@@ -4,6 +4,7 @@ import shutil
 import sqlite3
 import tempfile
 import threading
+import logging
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -12,6 +13,7 @@ import config
 import m7_logging
 import m7_logging.logging as _m7
 
+logger = logging.getLogger(__name__)
 
 TMPDIR = tempfile.mkdtemp()
 DB_PATH = os.path.join(TMPDIR, "test_seefire.db")
@@ -98,6 +100,39 @@ def test_wal_mode():
 def test_init_creates_db_file():
     if os.path.exists(DB_PATH):
         os.remove(DB_PATH)
+    m7_logging.init()
+    assert os.path.exists(DB_PATH)
+
+def test_concurrent_writes():
+    """Verify that multiple threads can log events simultaneously without locking errors."""
+    _reset_db()
+    
+    num_threads = 10
+    events_per_thread = 50
+    
+    def thread_target(thread_id):
+        for i in range(events_per_thread):
+            event = m7_logging.m7_event_t(
+                timestamp=f"2026-04-18T10:00:{i:02d}Z",
+                event_type=f"THREAD_{thread_id}",
+                fusion_score=0.1,
+                sensor_data="{}",
+                snapshot_path=""
+            )
+            m7_logging.log_event(event)
+            
+    threads = []
+    for i in range(num_threads):
+        t = threading.Thread(target=thread_target, args=(i,))
+        threads.append(t)
+        t.start()
+        
+    for t in threads:
+        t.join(timeout=5.0)
+        
+    all_events = m7_logging.get_events(limit=1000)
+    assert len(all_events) == num_threads * events_per_thread
+    logger.info("Concurrency test passed with %d total events.", len(all_events))
     if _m7._conn is not None:
         _m7._conn.close()
         _m7._conn = None

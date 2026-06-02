@@ -159,3 +159,299 @@ Tutarsızlık durumunda şu sıralama geçerli kabul edilmelidir:
 3. `CLAUDE.md`
 4. `docs/nelerdegisti.md`
 5. tarihsel raporlar ve eski roadmap belgeleri
+
+---
+
+## Tarih: 28 Mayıs 2026 — M5 Engel Kaçınma Algoritması Yenileme Tasarımı
+**Geliştirici:** Alperen & Claude
+
+### Karar
+Mevcut `obstacle.py` engel-bitti kontrolünü sabit `OBSTACLE_CLEAR_CM = 40` eşiği ile yapıyor. Bu eşik dinamik bir referansla değiştirilecek: engeli ilk gördüğümüzdeki front mesafesi `D₀` saklanır; clearance-side sensör `D₀ + 15 cm`'i aşınca engel bitmiş sayılır. Ayrıca yan-geçişte robot 90° döndüğü için yeni "ileri" sensör artık `front` (eski yön düzeltildi: önceden hatalı şekilde `right_cm` duvar kontrolü için kullanılıyordu sanılıyordu — gerçekte hiçbir yerde yapılmıyordu, eklenecek). Sıkıştığımızda (front < `WALL_CLEARANCE_CM = 10`) bir kez geri dönüp ters yönden bypass denenir; iki yön de tıkalıysa abort + alarm.
+
+### Plan Dosyası
+Tam tasarım, sensör yönelimi tabloları, algoritma akışı, dosya bazında değişiklikler ve simülatör yol haritası `m5_navigation/OBSTACLE_PLAN.md` dosyasında. İlerleme bu dosyada takip edilecek.
+
+### Sırada (henüz implement edilmedi)
+1. `config.py`: `OBSTACLE_CLEARANCE_DELTA_CM = 15.0`, `WALL_CLEARANCE_CM = 10.0`, `SIDE_PASS_SAFETY_CAP_CM = 200.0` eklenecek; `OBSTACLE_CLEAR_CM` silinecek.
+2. `m5_navigation/obstacle.py`: `avoid()` `reference_distance` parametresi alacak, `_side_pass` clearance/wall/cap üçlü çıkışla yeniden yazılacak, `_retreat_and_retry` helper'ı eklenecek (max 1 retry).
+3. `m5_navigation/navigation.py`: engel görüldüğünde `front_cm` `avoid()`'a geçirilecek.
+4. Testler güncellenecek; yeni senaryolar: duvar dibinde engel (retreat), iki yön tıkalı (abort).
+5. Simülatör altyapısı (`m5_navigation/sim/`): `world.py` (ray-cast geometri), `mock_drivers.py` (m2/m3 mock'larını world'e bağla), `visualizer.py` (matplotlib animasyon). Algoritmanın görsel doğrulaması için.
+
+### Açık Sorular
+- Abort sonrası M6 davranışı (entegrasyon yapıldığında belirlenecek).
+- `D₀` için `get_navigation_sensors_filtered`'ın front-median değeri kullanılacak (tek okuma değil).
+
+---
+
+## Tarih: 28 Mayıs 2026 — M5 Engel Algoritması Implementasyonu (Adım 2-6)
+**Geliştirici:** Alperen & Claude
+
+### Yapılan
+**`config.py`:** `OBSTACLE_CLEAR_CM` (sabit 40 cm eşik) kaldırıldı. Yerine eklenenler:
+- `OBSTACLE_CLEARANCE_DELTA_CM = 15.0` — clearance-side sensör `D₀ + delta`'yı aşınca engel bitti sayılır.
+- `WALL_CLEARANCE_CM = 10.0` — yan-geçişte front sensörü bu eşiğin altına inerse perpendicular duvara dayandık demektir.
+- `SIDE_PASS_SAFETY_CAP_CM = 200.0` — önceden obstacle.py içinde hardcoded olan 200 cm safety cap, config'e taşındı.
+
+**`m5_navigation/obstacle.py`:** Tamamen yeniden yazıldı.
+- `avoid(sector_id, reference_distance)` — caller engel anındaki `front_cm`'i (`D₀`) iletir.
+- `_side_pass` → `(traveled, wall_hit)` tuple döner. Üç çıkış: clearance, wall hit, safety cap.
+- Clearance kontrolü artık dinamik: `clearance > D₀ + OBSTACLE_CLEARANCE_DELTA_CM`.
+- Wall kontrolü **front sensörü** kullanıyor (90° dönüş sonrası front = yeni ileri).
+- `_attempt_bypass` helper: dönüş + side-pass + (wall hit ise) retreat + dönüşü geri al. Robotu başlangıç noktasına ve kuzey oryantasyonuna geri getirir.
+- Retry mantığı: ilk yön duvara takılırsa ters yönden 1 kez denenir. İkisi de tıkalıysa `ObstacleBlockedError` raise edilir.
+- `_return_to_route` mevcut encoder-only dönüş mantığı helper'a ayrıldı.
+
+**`m5_navigation/navigation.py`:** Tek satır değişikliği — `self._obstacle.avoid(sector_id, reference_distance=front)`.
+
+**`m5_navigation/tests/test_navigation.py`:** Mevcut testler yeni imzaya uyarlandı. Üç yeni test:
+- `test_avoidance_retries_on_wall_hit` — ilk yön wall, ters yön clear → 2. attempt LEFT'ten yapılır.
+- `test_avoidance_aborts_when_both_sides_blocked` — iki yön de wall → `ObstacleBlockedError`.
+- `test_side_pass_clears_at_dynamic_threshold` — `D₀ + 15` eşiğinin sabit 40 yerine kullanıldığını doğrular.
+- `test_side_pass_detects_wall_via_front_sensor` — wall detection front'tan, rear sensörden değil.
+
+### Doğrulama
+- `python3 -m pytest m5_navigation/tests/test_navigation.py -v` → **8/8 PASSED**.
+- `python3 -m pytest m2_motor/tests m3_sensors/tests` → **8/8 PASSED** (regresyon yok).
+
+### Sırada
+`OBSTACLE_PLAN.md` §7 durum tablosu güncellendi. Adım 7-9 (simülatör altyapısı) bekliyor: `m5_navigation/sim/world.py`, `mock_drivers.py`, `visualizer.py` ve senaryo dosyaları.
+
+---
+
+## Tarih: 30 Mayıs 2026 — M5 Simülatör + Forward-Pass Düzeltmesi
+**Geliştirici:** Alperen & Claude
+
+### Yapılan
+**Simülatör altyapısı (`m5_navigation/sim/`):**
+- `world.py` — 2D top-down dünya: dikdörtgen sınırlar, `Obstacle` rectangle listesi, robot pose (x, y, heading). Ray-segment intersection ile sensör okumaları geometriden türetiliyor. Motor komutları (drive/turn/stop) world'e bağlı; her komut sonrası `Frame` kaydediliyor.
+- `mock_drivers.py` — m2_motor / m3_sensors / m4_vision modül-seviye fonksiyonlarını world'e patch'liyor. NavigationController değişiklik olmadan üstte çalışıyor.
+- `visualizer.py` — matplotlib `FuncAnimation`. Harita sınırları, engeller, robot çemberi + yön oku, sensör ışınları (3), trajectory. `.gif` save ya da interaktif pencere.
+- `demo.py` — 3 senaryo (`single`, `wall`, `blocked`) ve CLI: `python3 -m m5_navigation.sim.demo single --save out.gif`.
+
+**Forward-pass faz eklendi (`obstacle.py`):**
+Simülatör ilk koşuda algoritma bug'u yakaladı: yan-geçiş → kuzeye dön → route'a geri akışı engelin **kuzey kenarını geçmediği** için her tur aynı engele takılıp sonsuz döngüye giriyordu. Eski kodda da olan, testlerin `_side_pass`'ı mock'lamasıyla gizlenmiş bir bug'tı.
+
+Eklenen faz (`_forward_pass_obstacle`): yan-geçiş clear olduktan ve kuzeye döndükten sonra, robot kuzeye step-step ilerliyor. İki-aşamalı state machine:
+- **ACQUIRE**: yan sensör engeli yakın görene kadar (henüz altındayız) sür.
+- **RELEASE**: yan sensör tekrar uzak görene kadar (engelin kuzey kenarını geçtik) sür.
+
+Bu mesafe gerçek kuzey ilerlemesi → `total_distance_cm` korunuyor (lateral hareketler hâlâ sıfırlanıyor). `config.FORWARD_PASS_SAFETY_CAP_CM = 100.0` cap eklendi. Yeni unit test `test_forward_pass_clears_when_side_sensor_passes_obstacle` ekledi.
+
+**Bypass akış güncellemesi (`avoid()`):**
+- `_attempt_bypass` artık `(side_distance, forward_distance)` döndürüyor (önceden sadece side).
+- `_return_to_route` basitleşti: forward-pass sonrası robot zaten kuzey bakıyor; tek dönüş + sürüş + dönüş.
+- `set_total_distance_cm(north_before + forward_distance)` — forward-pass gerçek ilerleme olarak sayılıyor.
+
+### Doğrulama
+- `python3 -m pytest m5_navigation/tests/test_navigation.py -v` → **9/9 PASSED**.
+- Simülatör 3 senaryosunun hepsi başarılı:
+  - **single**: (30,0) → (30,150). 44 frame. Temiz bypass.
+  - **wall**: RIGHT engellendi, LEFT retry başardı → (30,150). 55 frame.
+  - **blocked**: iki yön de engelli, `ObstacleBlockedError` raise edildi. Robot (30,50)'de güvenle durdu.
+- GIF'ler `runtime_data/sim_*.gif` altında kaydedildi (her biri 600-750 KB).
+
+### Kullanım
+```bash
+python3 -m m5_navigation.sim.demo single                          # interaktif pencere
+python3 -m m5_navigation.sim.demo wall --save run.gif             # gif kaydet
+python3 -m m5_navigation.sim.demo blocked --interval 150          # frame hızı
+```
+
+### Sırada
+M6 Decision Engine entegrasyonu — `ObstacleBlockedError` artık navigation'dan dışarı çıkıyor; M6 FSM bunu alarm/abort event'i olarak ele almalı. Sim'e yeni senaryolar kolayca eklenebilir (birden fazla engel, ardışık engeller).
+
+---
+
+## Tarih: 30 Mayıs 2026 — 4-Yön Tarama + Saf Kuzey Encoder Modeli
+**Geliştirici:** Alperen & Claude
+
+### Karar
+Her sektörün **tam ortasında** robot durup 4 yöne (N/E/S/W) kamera taraması yapacak — yangın/duman tespiti için alan kapsama. Tetikleme noktası **y-koordinatı** (kuzey ilerlemesi) midpoint'e geldiği an; rota üzerinde mi yoksa engel bypass'i sırasında forward-pass içinde mi olduğu farketmez. Sektör sonunda (waypoint) sadece tek frame snapshot — 4-yön tarama orada yapılmaz (kullanıcı seçimi B).
+
+Bunun için **encoder modeli** değişti: `m2_motor.get_total_distance_cm()` artık "toplam kat edilen mesafe" değil **saf kuzey ilerlemesi**. Lateral hareketler `_drive_lateral` sarmalı ile per-step save/restore yaparak encoder'ı kirletmiyor.
+
+### Yapılan
+**`m5_navigation/obstacle.py`:**
+- Yeni `_drive_lateral(cm)` static method — `drive_distance_cm` çağrısını encoder save/restore ile sarmalıyor. Side-pass, return-to-route, retreat-from-wall'da kullanılıyor.
+- `_side_pass` lateral step → `_drive_lateral`.
+- `_return_to_route` lateral drive → `_drive_lateral`.
+- `_retreat_from_wall` lateral drive → `_drive_lateral`.
+- `avoid()` sonundaki `set_total_distance_cm(north_before + forward_distance)` satırı **kaldırıldı**. Lateral rollback sayesinde encoder zaten doğru.
+- Modül docstring'i yeni modeli açıklayacak şekilde güncellendi.
+
+**`m5_navigation/navigation.py`:**
+- Yeni `_scan_four_directions(label_prefix)` method:
+  1. `m2_motor.stop()` + 0.3 s.
+  2. Sırasıyla N→E→S→W: `snapshot_callback("...-N/E/S/W")` + 0.2 s + `turn_right_90()` + 0.1 s.
+  3. Net rotasyon 360° → robot başlangıç yönünde (kuzey) kalır.
+- `_check_midpoint` artık `_snapshot` yerine `_scan_four_directions` çağırıyor.
+- `_snapshot` (tek frame) waypoint'lerde kullanılmaya devam ediyor.
+
+**`m5_navigation/tests/test_navigation.py`:**
+- `test_drive_lateral_preserves_north_progress` — lateral drive encoder'ı kirletmiyor.
+- `test_four_direction_scan_captures_each_heading` — 4 snapshot doğru label, 4 right-turn.
+- `test_avoidance_maneuver_flow` set_total_distance assertion kaldırıldı (artık `avoid()` o satırı çağırmıyor).
+
+### Doğrulama
+- `python3 -m pytest m5_navigation/tests/test_navigation.py -v` → **11/11 PASSED**.
+- Simülatör `single` senaryosu log'u:
+  ```
+  [OBSTACLE] D0=20.0 cm. Bypass direction: LEFT
+  [OBSTACLE] Side-pass cleared after 15.0 cm (right_cm=170.0 > 35.0).
+  [OBSTACLE] Forward-pass acquired obstacle at 20.0 cm (right_cm=5.0).
+  [SCAN] sector-1-midpoint-N
+  [SCAN] sector-1-midpoint-E
+  [SCAN] sector-1-midpoint-S
+  [SCAN] sector-1-midpoint-W
+  [OBSTACLE] Forward-pass released after 40.0 cm (right_cm=45.0 > 35.0).
+  [WAYPOINT] Sector 1 end.
+  ```
+  Tarama bypass forward-pass içinde, y=75 (sektör midpoint) noktasında tetiklendi. Robot kuzeye bakıyordu, 4 yönü taradı, kaldığı yerden devam etti.
+- Tüm 3 sim senaryosunun GIF'i yenilendi (`runtime_data/sim_*.gif`).
+
+### Sırada
+- M6 Decision Engine'in `[SCAN]` event'lerini fire/smoke fusion için işlemesi (M4 inference pipeline tamamlandığında).
+- M7 logging tarafına 4-yön snapshot'larının ayrı event'ler olarak yazılması (label zaten ayrımı içeriyor).
+
+---
+
+## Tarih: 30 Mayıs 2026 — Sensör Gürültü Filtresi + Sütun-Uyumlu Konum Düzeltme
+**Geliştirici:** Alperen & Claude
+
+### Karar
+Üç ilişkili iyileştirme birlikte yapıldı:
+1. **D₀ ölçümü gürültüden korunsun** — engel tespit anında front değeri tek okuma yerine 3-okuma median'ından alınsın (`get_navigation_sensors_filtered`). Tek hatalı HC-SR04 reading'i (ör. yansıma yüzünden 3 cm okuma) artık bypass mesafelerini bozamaz.
+2. **Periyodik konum düzeltme** — `PositionVerifier.verify_and_correct()` sadece bypass sonrası değil, **her waypoint'te de** çağrılır. Encoder slip ve dönüş açı hatası uzun rotalarda birikiyor; her sektör sonu bir düzeltme şansı.
+3. **İki-sensör sanity gate (sütun-uyumlu)** — gerçek harita düzgün dikdörtgen değil; binanın taşıyıcı sütunları/dikitleri var. Bunların yanından geçerken tek sensör tabanlı düzeltme yanlış kalibrasyon yapar. Yeni mantık:
+   ```
+   expected_width = START_LEFT_CM + START_RIGHT_CM   # 60 cm
+   measured = left + right
+   if |measured - expected| > 2 × POSITION_TOLERANCE_CM:
+       skip correction (sütun/anomali var)
+   ```
+   Sütun yanında robot encoder'a güveniyor; bir sonraki güvenli waypoint'te düzeltme tekrar denenir.
+
+### Yapılan
+**`m5_navigation/navigation.py`:**
+- `_traverse_sector`'da front okuması `get_navigation_sensors()` → `get_navigation_sensors_filtered()`.
+- Waypoint snapshot'tan sonra `self._position.verify_and_correct()` çağrısı eklendi.
+
+**`m5_navigation/position.py`:**
+- `verify_and_correct` baş kısmına iki-sensör genişlik kontrolü eklendi. Tolerans `2 × POSITION_TOLERANCE_CM = 10 cm`.
+- Width mismatch durumunda INFO log'u + erken return.
+
+**`m5_navigation/tests/test_navigation.py`:**
+- `test_verify_and_correct_skips_when_corridor_width_mismatches` — sol+sağ ≠ 60 olunca düzeltme yapılmıyor.
+- `test_verify_and_correct_applies_when_width_consistent` — genişlik tutuyorsa ve left_err > tolerans ise düzeltme uygulanıyor.
+
+### Doğrulama
+- `python3 -m pytest m5_navigation/tests/test_navigation.py -v` → **13/13 PASSED**.
+- Sim multi senaryosu: 3 sektör tamamlandı, scan'ler düzgün tetiklendi. Geometri mükemmel olduğundan width check her zaman geçti ve left_err her zaman 0 olduğu için düzeltme aksiyonu fire etmedi — sim'de **beklenen davranış**. Gerçek robotta tekerlek slip oldukça etkin olacak.
+- Sim'in mock geometrisi sütun simüle etmiyor; sütun-uyumlu davranış birim testleriyle doğrulandı.
+
+### Notlar
+- İleride spesifik sütun konumları config'e (örn. `COLUMN_WAYPOINTS = {2, 5}`) eklenebilir. Şu anki yaklaşım haritaya özel veri istemiyor, dinamik sensör kontrolü ile çalışıyor.
+- M5 algoritmik olarak **kapanmaya** yakın. Kalan iş ağırlıklı olarak M6/M7 entegrasyonu ve gerçek robotta kalibrasyon.
+
+---
+
+## Tarih: 2 Haziran 2026 — Git Dal Birleştirme (Branch Unification)
+**Geliştirici:** Bekir Emre Sarıpınar & Claude
+
+### Sorun
+`e5dfa2f` ("feat: implement M6 Decision Engine with FSM") ortak atadan sonra **3 farklı dal** ayrılmıştı. `main` branch'i `origin/main` ile uyumsuz hale gelmişti:
+
+```
+e5dfa2f  ← ortak ata
+  ├── 2055705  → local main                    (VisionM4 threading + DecisionEngine)
+  ├── 715376f → fd3144f                        (Batuhan: sensor test + kablaj dokümanı)
+  │     └── origin/feat/m3_full_test
+  └── 98f1145 → 4eb865c (merge PR#7)           (Alperen: obstacle redesign + simülasyon)
+        └── origin/main
+```
+
+`git pull` çalışmıyordu: local `main` `origin/main`'in 2 commit gerisinde ve 1 commit önündeydi.
+
+### Çözüm Adımları
+
+**1. `unified` branch'i oluşturuldu** — `origin/main` taban alınarak (Alperen'in PR #7'sini içerir):
+```bash
+git checkout -b unified origin/main
+```
+
+**2. `main` branch'i `unified`'a merge edildi** — VisionM4 threading değişiklikleri (`2055705`) getirildi:
+- Tek çakışma: `m5_navigation/tests/test_navigation.py`
+- Çözüm: Alperen'in versiyonu korundu (obstacle API'si tamamen yenilenmişti, eski test'ler uyumsuzdu)
+- Sonuç: 13/13 test geçti
+
+**3. Batuhan'ın branch'i (`origin/feat/m3_full_test`) merge edildi — `unified-batu` branch'i**:
+- Çakışma: sadece `m4_vision/vision.py` (import satırları — `os` + `threading` + `time` hepsi korundu)
+- Auto-merge çalışanlar: `config.py`, `m3_sensors/sensors.py`, `m2_motor/motor.py`, `test_mocks.py`
+- Batuhan'dan gelen yeni dosyalar: `data_sensors_test.py`, `hardware_sensor_check.py`, `interactive_ride_test.py`, `docs/Seefire Wiring Plan.md`, `docs/bugunku_sensor_test_plani.md`
+
+**4. `main` güncellendi** — `unified-batu` `main`'e fast-forward merge edildi:
+```bash
+git checkout main && git merge unified-batu
+git push origin main
+```
+
+**5. Eski dallar temizlendi** — `unified`, `unified-batu` silindi. Sadece `main` kaldı.
+
+### Birleşen Değişiklikler
+
+| Kaynak | İçerik | Dahil |
+|--------|--------|-------|
+| **Alperen** (PR #7) | Obstacle bypass redesign (wall-hit, retreat, forward-pass), 4-yön tarama, simülatör (world/mock/visualizer), dinamik D₀, sütun-uyumlu pozisyon düzeltme, medyan filtreli D₀, 13 test | `unified` tabanı |
+| **VisionM4** (`main`) | VisionM4 threading (`_update_loop`, `capture_frame`), DecisionEngine fusion score + `_on_snapshot` callback, M7 logging testleri | `main` merge |
+| **Batuhan** (`feat/m3_full_test`) | GPIO pin'leri fiziksel kablaja göre düzeltildi, MLX90614 raw SMBus (adafruit bağımlılığı kalktı), SPI chip select manuel kontrol, `SEEFIRE_FORCE_MOCK` env var, donanım test script'leri, kablaj dokümanı | 2. merge |
+
+### Doğrulama
+- `python3 -m pytest -v` → **34/34 PASSED** (tüm modüller)
+- `main` remote'a pushlandı: `4eb865c..3766560 main -> main`
+- Çalışmayan eski branch'ler temizlendi
+
+---
+
+## Tarih: 2 Haziran 2026 — Repo Temizliği + M2/M3 İyileştirmeleri
+**Geliştirici:** Bekir Emre Sarıpınar & Claude
+
+### Yapılan
+
+**Repo temizliği:**
+- `__pycache__/` dosyaları git index'inden kaldırıldı (15 dosya). `.gitignore` zaten `__pycache__/` içeriyordu ama önceden track edilmişti.
+- `config_updater.py` silindi — tek kullanımlık DHT22/MPU6050 temizleme script'i, artık gerekmiyor.
+- `demo.py` güncellendi — çalışmayan eski API çağrıları (`read_mq2()`, `read_mlx90614()`, `read_dht22()`, `read_hcsr04()`, `read_mpu6050_yaw()`) kaldırıldı, yerine mevcut API (`get_fusion_sensors()`, `get_navigation_sensors()`, `get_navigation_sensors_filtered()`) kullanıldı.
+
+**M3 Sensor Integration iyileştirmeleri:**
+
+| Değişiklik | Detay | Dosya |
+|---|---|---|
+| MLX90614 hata yönetimi | `except Exception: pass` → `except Exception as e: logger.warning(...)` + `_mlx_sensor = None` | `m3_sensors/sensors.py:175` |
+| Sensor disable mantığı | Hata sonrası `_mlx_sensor = None` → sonraki fusion okumalarda IR sensörü tekrar denenmez, 25.0°C fallback kullanılır | `m3_sensors/sensors.py:177` |
+| Ultrasonik GPIO cleanup | `cleanup()` artık SPI/I2C'ye ek olarak TRIG/ECHO pinleri ve MQ2_CS_PIN için `GPIO.cleanup()` çağırıyor | `m3_sensors/sensors.py:206-218` |
+| Mock ultrasonik deterministic | `random.uniform(15, 45)` → `_RNG.uniform(15, 45)` (seed=42 ile `random.Random` instance). Testlerde aynı sıra garanti. | `m3_sensors/sensors.py:141` |
+
+**M2 Motor Control iyileştirmeleri:**
+
+| Değişiklik | Detay | Dosya |
+|---|---|---|
+| `cleanup()` metodu | PWM stop + `GPIO.cleanup(pin_list)` ile tüm M2 pin'lerini serbest bırakır. Mock modda hiçbir şey yapmaz. Idempotent. | `m2_motor/motor.py:183-199` |
+| Lazy logger | 3 adet `f"..."` → `"%s"` formatı (`motor_drive`, `motor_turn`, `set_alarm`). Debug seviyesindeki bu loglar Pi'de CPU israfı yapmaz. | `m2_motor/motor.py:138,160,218` |
+| `cleanup` export | `__init__.py` import ve `__all__` listesine eklendi. | `m2_motor/__init__.py` |
+| Signal handler güncellemesi | `main.py:signal_handler`'a `motor.cleanup()` çağrısı eklendi (M2 pin'leri motor stop'tan sonra temizlenir). | `main.py:40` |
+
+**Yeni testler:**
+
+| Test | Modül | Doğruladığı |
+|---|---|---|
+| `test_cleanup_safe_in_mock` | M2 | `cleanup()` mock modda güvenli, iki kere çağrılabilir, `_initialized` değişmez |
+| `test_mlx_failure_disables_sensor` | M3 | MLX okuma hatası → `_mlx_sensor = None`, ir_temp = 25.0 fallback |
+| `test_mlx_failure_stays_disabled` | M3 | `_mlx_sensor = None` iken `_read_mlx90614_celsius` çağrılmaz, direkt 25.0 döner |
+| `test_mock_ultrasonic_deterministic` | M3 | Seed'li RNG ile aynı girdiler her seferinde aynı değeri üretir |
+
+### Doğrulama
+- `python3 -m pytest -v` → **38/38 PASSED** (+4 yeni test)
+- `demo.py` çalışıyor: M7 logging + M3 sensor mock demo başarılı
+- `main` remote'a pushlandı: `3766560..5b62c1e main -> main`
+- Repo temiz: `__pycache__` track edilmiyor, `config_updater.py` yok, `demo.py` güncel API kullanıyor
