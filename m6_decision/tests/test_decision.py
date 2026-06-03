@@ -173,26 +173,44 @@ class TestDecisionEngine(unittest.TestCase):
         mock_motor_stop.assert_called_once()
         self.assertEqual(engine.state, RobotState.NAVIGATE)
 
-    @patch("m2_motor.motor.set_alarm")
-    def test_alarm_state_remains_active_when_high(self, mock_set_alarm):
+    @patch("m4_vision.trigger_fire_alarm")
+    @patch("m4_vision.is_alarm_confirmed", return_value=False)
+    @patch("m4_vision.get_fire_confidence", return_value=0.8)
+    @patch("m2_motor.motor_drive")
+    @patch("m2_motor.stop")
+    @patch("m2_motor.motor.motor_stop")
+    @patch("m3_sensors.get_fusion_sensors")
+    def test_alarm_state_backs_up_and_waits_for_confirmation(
+        self, mock_sensors, mock_mstop, mock_stop, mock_drive,
+        mock_fire_conf, mock_confirmed, mock_trigger
+    ):
+        mock_s = MagicMock()
+        mock_s.smoke_level = 800.0
+        mock_s.ir_temp = 50.0
+        mock_sensors.return_value = mock_s
+
         engine = DecisionEngine()
         engine.state = RobotState.ALARM
         engine.fusion_score = 0.75
 
-        engine._handle_state()
-        mock_set_alarm.assert_called_once_with(led=True, buzzer=True)
-        self.assertEqual(engine.state, RobotState.ALARM)
+        with patch("time.sleep"):  # skip backup sleep
+            engine._handle_state()
 
-    @patch("m2_motor.motor.set_alarm")
-    def test_alarm_clears_when_risk_drops_below_clear_threshold(self, mock_set_alarm):
+        mock_trigger.assert_called_once()
+        self.assertEqual(engine.state, RobotState.ALARM)  # still waiting
+        self.assertTrue(engine._alarm_setup_done)
+
+    @patch("m4_vision.clear_fire_alarm")
+    @patch("m4_vision.is_alarm_confirmed", return_value=True)
+    def test_alarm_clears_when_user_confirms_ok(self, mock_confirmed, mock_clear):
         engine = DecisionEngine()
         engine.state = RobotState.ALARM
-        # Risk drops below config.FUSION_CLEAR_THRESH (0.4)
-        engine.fusion_score = 0.35
+        engine.fusion_score = 0.75
+        engine._alarm_setup_done = True  # simulate already-setup state
 
         engine._handle_state()
-        # Verify that set_alarm(led=False, buzzer=False) was called to reset the alarm
-        mock_set_alarm.assert_any_call(led=False, buzzer=False)
+
+        mock_clear.assert_called_once()
         self.assertEqual(engine.state, RobotState.NAVIGATE)
 
 

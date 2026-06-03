@@ -64,7 +64,11 @@ STEP_DISTANCE_CM = 5.0
 SIDE_STEP_CM = 5.0
 
 # Obstacle thresholds (front sensor)
-OBSTACLE_THRESHOLD_CM = 55.0   # below this → obstacle, trigger avoidance
+OBSTACLE_THRESHOLD_CM = 60.0   # below this → obstacle, trigger avoidance
+
+# Engel tespitinde kamera görüntüsünün oturması için bekleme (s).
+# Ucuz kameralarda görüntü gecikiyor; bu süre dolmadan yön kararı verilmez.
+OBSTACLE_CAMERA_SETTLE_S = 7.0
 
 # Side-pass dynamic clearance: clearance-side sensor must exceed D₀ + delta
 # to declare the obstacle cleared. D₀ is the front reading at detection time.

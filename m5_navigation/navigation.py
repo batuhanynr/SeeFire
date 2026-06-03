@@ -45,9 +45,6 @@ MAX_SEGMENTS          = 20      # Azami segment sayısı (güvenlik)
 NUDGE_CM              = 15.0    # Merkeze alırken yatay hareket mesafesi (cm)
 MAX_NUDGE_ATTEMPTS    = 4       # Tek merkez oturumunda en fazla düzeltme denemesi
 
-HEADING_CHECK_INTERVAL_S = 2.0  # Sürüş sırasında yön kontrolü periyodu (saniye)
-HEADING_MICRO_TURN_DEG   = 10   # Görsel yön düzeltmesi için mikro dönüş açısı
-
 
 class ObstacleBlockedError(RuntimeError):
     """Önde duvar/engel, aşılamadı."""
@@ -206,14 +203,20 @@ class NavigationController:
 
                 if 0 < front_cm <= config.OBSTACLE_THRESHOLD_CM:
                     logger.warning(
-                        "[ENGEL] Önde engel: %.1f cm. Sürüş durduruluyor ve bypass manevrası başlatılıyor...",
-                        front_cm)
+                        "[ENGEL] Önde engel: %.1f cm. DURUYORUM.", front_cm)
                     m2_motor.stop()
                     is_driving = False
 
                     # Güncel penceredeki mesafeyi odometer'a kaydet
                     current_window = m2_motor.get_measured_distance_cm()
                     m2_motor.set_total_distance_cm(current_total + current_window)
+
+                    # Kamera görüntüsü oturana kadar bekle (ucuz kamerada gecikme var)
+                    settle = config.OBSTACLE_CAMERA_SETTLE_S
+                    logger.info(
+                        "[ENGEL] Kamera görüntüsü oturuyor, %.0f sn bekleniyor...", settle)
+                    time.sleep(settle)
+                    logger.info("[ENGEL] Bekleme tamamlandı, bypass manevrası başlıyor.")
 
                     # Kaçınma manevrasını başlat
                     from m5_navigation.position import PositionVerifier

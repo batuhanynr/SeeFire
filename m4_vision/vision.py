@@ -67,12 +67,44 @@ if CV_AVAILABLE:
 
 
 # ---------------------------------------------------------------------------
-# MJPEG stream server (Pi → PC canlı görüntü)
-# SEEFIRE_STREAM=1  →  http://<pi-ip>:8080/  veya  /stream
+# Fire alarm notification state
+# ---------------------------------------------------------------------------
+
+_alarm_active = threading.Event()
+_alarm_confirmed = threading.Event()
+_alarm_payload: dict = {}
+
+
+def trigger_fire_alarm(data: dict) -> None:
+    """Set by M6 when fire is detected. Activates alarm page on web UI."""
+    global _alarm_payload
+    _alarm_payload = dict(data)
+    _alarm_confirmed.clear()
+    _alarm_active.set()
+    logger.error("[ALARM] Yangın alarmı tetiklendi: %s", data)
+
+
+def is_alarm_confirmed() -> bool:
+    """True after user clicks OK on the alarm web page."""
+    return _alarm_confirmed.is_set()
+
+
+def clear_fire_alarm() -> None:
+    """Reset alarm state after acknowledgment."""
+    global _alarm_payload
+    _alarm_active.clear()
+    _alarm_confirmed.clear()
+    _alarm_payload = {}
+    logger.info("[ALARM] Yangın alarmı sıfırlandı.")
+
+
+# ---------------------------------------------------------------------------
+# MJPEG stream + alarm notification server
+# Her zaman başlar (SEEFIRE_STREAM bağımsız) — port: SEEFIRE_STREAM_PORT (def 8080)
 # ---------------------------------------------------------------------------
 
 class _MjpegServer(threading.Thread):
-    """Stdlib-only MJPEG HTTP server. No Flask dependency."""
+    """Stdlib-only HTTP server: MJPEG stream + fire alarm page."""
 
     def __init__(self, get_frame_fn, port: int = 8080):
         super().__init__(daemon=True, name="mjpeg-server")
@@ -84,45 +116,114 @@ class _MjpegServer(threading.Thread):
 
         class _Handler(BaseHTTPRequestHandler):
             def do_GET(self):
-                if self.path in ("/stream", "/"):
-                    if self.path == "/":
-                        self.send_response(200)
-                        self.send_header("Content-Type", "text/html")
-                        self.end_headers()
-                        self.wfile.write(
-                            b"<html><body style='background:#000;margin:0'>"
-                            b"<img src='/stream' style='width:100%'>"
-                            b"</body></html>"
-                        )
-                        return
+                if _alarm_active.is_set():
+                    self._serve_alarm_page()
+                    return
+                if self.path == "/stream":
+                    self._serve_mjpeg(get_frame)
+                elif self.path == "/":
                     self.send_response(200)
-                    self.send_header(
-                        "Content-Type",
-                        "multipart/x-mixed-replace; boundary=frame",
-                    )
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
                     self.end_headers()
-                    while True:
-                        frame = get_frame()
-                        if frame is None:
-                            time.sleep(0.1)
-                            continue
-                        ok, buf = cv2.imencode(
-                            ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75]
-                        )
-                        if not ok:
-                            continue
-                        data = buf.tobytes()
-                        try:
-                            self.wfile.write(
-                                b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
-                                + data
-                                + b"\r\n"
-                            )
-                        except Exception:
-                            return
+                    self.wfile.write(
+                        b"<html><body style='background:#000;margin:0;color:#0f0;font-family:monospace'>"
+                        b"<img src='/stream' style='width:100%;display:block'>"
+                        b"<p style='text-align:center;padding:8px'>SeeFire - Canli Kamera</p>"
+                        b"</body></html>"
+                    )
                 else:
                     self.send_response(404)
                     self.end_headers()
+
+            def do_POST(self):
+                if self.path == "/ok":
+                    _alarm_confirmed.set()
+                    self.send_response(303)
+                    self.send_header("Location", "/")
+                    self.end_headers()
+                    logger.info("[ALARM] Kullanici alarmi onayladi (web OK butonu).")
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
+            def _serve_alarm_page(self):
+                p = _alarm_payload
+                fire_pct  = int(p.get("fire_conf",  0.0) * 100)
+                smoke_raw = p.get("smoke", 0)
+                temp_c    = p.get("temp",  0.0)
+                score     = p.get("score", 0.0)
+                ts        = p.get("time",  "—")
+                html = f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="3">
+<title>SeeFire — YANGIN ALARMI</title>
+<style>
+  body{{margin:0;background:#1a0000;color:#ff4444;font-family:monospace;
+       display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh}}
+  h1{{font-size:2.5rem;text-shadow:0 0 20px #ff0000;animation:blink 0.8s step-end infinite}}
+  @keyframes blink{{50%{{opacity:0}}}}
+  .card{{background:#2a0000;border:2px solid #ff0000;border-radius:12px;
+         padding:24px 48px;text-align:center;box-shadow:0 0 40px #ff000055}}
+  .row{{display:flex;justify-content:space-between;gap:48px;margin:12px 0;font-size:1.1rem}}
+  .label{{color:#ff8888}} .val{{color:#ffffff;font-weight:bold}}
+  .btn{{margin-top:28px;padding:16px 64px;background:#ff2222;color:#fff;border:none;
+        border-radius:8px;font-size:1.4rem;font-weight:bold;cursor:pointer;
+        box-shadow:0 0 20px #ff000099;transition:transform .1s}}
+  .btn:hover{{transform:scale(1.05)}}
+  .sub{{margin-top:12px;color:#ff6666;font-size:.9rem}}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>&#128293; YANGIN ALARMI &#128293;</h1>
+  <div class="row">
+    <div><span class="label">Yangin Guven:</span> <span class="val">{fire_pct}%</span></div>
+    <div><span class="label">Duman:</span> <span class="val">{smoke_raw}/4095</span></div>
+    <div><span class="label">Sicaklik:</span> <span class="val">{temp_c:.1f} °C</span></div>
+    <div><span class="label">Fusion Skoru:</span> <span class="val">{score:.2f}</span></div>
+  </div>
+  <p class="sub">Zaman: {ts} &nbsp;|&nbsp; Robot durdu ve geri cekildi</p>
+  <form method="POST" action="/ok">
+    <button class="btn" type="submit">&#10003; TAMAM — Alarmi Onayla ve Devam Et</button>
+  </form>
+</div>
+</body>
+</html>"""
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(html.encode("utf-8"))
+
+            def _serve_mjpeg(self, get_frame):
+                self.send_response(200)
+                self.send_header(
+                    "Content-Type",
+                    "multipart/x-mixed-replace; boundary=frame",
+                )
+                self.end_headers()
+                while True:
+                    if _alarm_active.is_set():
+                        return
+                    frame = get_frame()
+                    if frame is None:
+                        time.sleep(0.1)
+                        continue
+                    ok, buf = cv2.imencode(
+                        ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75]
+                    )
+                    if not ok:
+                        continue
+                    data = buf.tobytes()
+                    try:
+                        self.wfile.write(
+                            b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
+                            + data
+                            + b"\r\n"
+                        )
+                    except Exception:
+                        return
 
             def log_message(self, *_):
                 pass
@@ -130,7 +231,8 @@ class _MjpegServer(threading.Thread):
         socketserver.TCPServer.allow_reuse_address = True
         with socketserver.TCPServer(("", self._port), _Handler) as srv:
             logger.info(
-                "MJPEG stream başlatıldı → http://<pi-ip>:%d/", self._port
+                "Web sunucusu başlatıldı → http://<pi-ip>:%d/  (stream + alarm bildirimi)",
+                self._port,
             )
             srv.serve_forever()
 
@@ -211,8 +313,12 @@ class VisionM4:
         self._actual_h: int = config.CAMERA_TARGET_HEIGHT
 
     def init(self) -> bool:
+        port = int(os.environ.get("SEEFIRE_STREAM_PORT", "8080"))
+
         if not CV_AVAILABLE:
             logger.info("[MOCK] M4 Vision initialized.")
+            if os.environ.get("SEEFIRE_STREAM") == "1":
+                _MjpegServer(self.capture_frame, port).start()
             return True
         try:
             self._capture = cv2.VideoCapture(0)
@@ -247,14 +353,15 @@ class VisionM4:
                 YOLO_AVAILABLE,
             )
 
-            # Opsiyonel MJPEG stream: SEEFIRE_STREAM=1 ile etkinleştir
-            if os.environ.get("SEEFIRE_STREAM") == "1":
-                port = int(os.environ.get("SEEFIRE_STREAM_PORT", "8080"))
-                _MjpegServer(self.capture_frame, port).start()
-
         except Exception as exc:
             logger.error("Camera open failed: %s", exc)
             self._capture = None
+
+        # Web sunucusu: gerçek Pi'de her zaman, mock modda yalnızca SEEFIRE_STREAM=1 ile
+        if CV_AVAILABLE or os.environ.get("SEEFIRE_STREAM") == "1":
+            _MjpegServer(self.capture_frame, port).start()
+        else:
+            logger.info("[MOCK] Web sunucusu başlatılmıyor (mock mod, SEEFIRE_STREAM=0).")
         return True
 
     def _update_loop(self) -> None:
@@ -360,32 +467,82 @@ class VisionM4:
         return "RIGHT" if left_area > right_area else "LEFT"
 
     def _pixel_count_direction_hint(self, frame: "np.ndarray") -> Optional[str]:
-        """Pixel-count obstacle heuristic.
+        """Ağırlıklı piksel-yoğunluk engel buluşsal yöntemi.
 
-        1. Convert to grayscale → Gaussian blur → Canny edges.
-        2. Focus on lower half of frame (where close obstacles dominate).
-        3. Count edge pixels in left half vs right half.
-        4. Fewer edge pixels = less obstacle = more free space → go that way.
+        Kareyi iki dikey ROI'ya böler:
+          - Alt 1/3 (çok yakın engel): ağırlık 3×
+          - Orta 1/3 (yakın engel):    ağırlık 2×
+          - Üst 1/3 (uzak alan):       ağırlık 1×
 
-        This is more robust than the gap approach: it considers the full
-        density of obstacles across each side, not just the outermost edge.
+        Her bölgede Canny kenar pikselleri sol/sağ yarıya ayrılarak sayılır.
+        Ağırlıklı toplamı az olan taraf → daha az engel → o tarafa dön.
+
+        Karar için en az %20 asimetri şartı aranır (gürültü bağışıklığı).
         """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        edges = cv2.Canny(blurred, 50, 150)
+        blurred = cv2.GaussianBlur(gray, (7, 7), 0)
+        edges = cv2.Canny(blurred, 40, 120)
 
         h, w = edges.shape
-        roi = edges[h // 2:, :]  # lower half — close obstacles prominent here
+        mid = w // 2
+        h3  = h // 3
 
-        left_pixels = int(roi[:, : w // 2].sum() // 255)
-        right_pixels = int(roi[:, w // 2 :].sum() // 255)
+        # Üç yatay kuşak (aşağıdan yukarı): yakın → uzak
+        bands = [
+            (edges[2 * h3:,       :], 3),  # alt 1/3 — çok yakın
+            (edges[h3:2 * h3,     :], 2),  # orta 1/3
+            (edges[:h3,           :], 1),  # üst 1/3
+        ]
 
-        total = left_pixels + right_pixels
-        if total < 20:  # too few edges → no significant obstacle, let ultrasonic decide
+        left_score  = 0.0
+        right_score = 0.0
+        for band, weight in bands:
+            left_score  += band[:, :mid].sum() / 255.0 * weight
+            right_score += band[:, mid:].sum() / 255.0 * weight
+
+        total = left_score + right_score
+        if total < 30:  # yetersiz kenar → ultrasonik'e bırak
             return None
 
-        logger.debug("[VISION] Pixel count — left: %d  right: %d", left_pixels, right_pixels)
-        return "RIGHT" if left_pixels > right_pixels else "LEFT"
+        # %20 asimetri şartı yoksa None döndür (eşit engel → ultrasonik daha güvenilir)
+        imbalance = abs(left_score - right_score) / total
+        if imbalance < 0.20:
+            return None
+
+        logger.debug(
+            "[VISION] Ağırlıklı piksel — sol: %.1f  sağ: %.1f  asimetri: %.2f",
+            left_score, right_score, imbalance,
+        )
+        return "RIGHT" if left_score > right_score else "LEFT"
+
+    def determine_turn_direction_stable(
+        self, n_samples: int = 5, interval_s: float = 0.8
+    ) -> Optional[str]:
+        """n_samples kare üzerinde oy çokluğuyla kararlı yön kararı.
+
+        Ucuz kameralarda tek kare yanıltıcı olabilir. Kamera zaten duraksama
+        sırasında oturdu; burada sadece kararlılık için birkaç kare toplanır.
+        """
+        if not CV_AVAILABLE:
+            return None
+        votes: list[str] = []
+        for _ in range(n_samples):
+            d = self.determine_turn_direction()
+            if d is not None:
+                votes.append(d)
+            time.sleep(interval_s)
+        if not votes:
+            return None
+        left_v  = votes.count("LEFT")
+        right_v = votes.count("RIGHT")
+        if left_v == right_v:
+            return None
+        result = "LEFT" if left_v > right_v else "RIGHT"
+        logger.info(
+            "[VISION] Kararlı yön kararı: %s  (LEFT×%d RIGHT×%d)",
+            result, left_v, right_v,
+        )
+        return result
 
     def get_fire_side(self) -> Optional[str]:
         """'LEFT' | 'RIGHT' | None — frame side where fire was last detected (thread-safe)."""
@@ -456,5 +613,6 @@ get_fire_confidence = _instance.get_fire_confidence
 get_smoke_confidence = _instance.get_smoke_confidence
 get_fire_side = _instance.get_fire_side
 determine_turn_direction = _instance.determine_turn_direction
+determine_turn_direction_stable = _instance.determine_turn_direction_stable
 get_heading_correction = _instance.get_heading_correction
 close = _instance.close
