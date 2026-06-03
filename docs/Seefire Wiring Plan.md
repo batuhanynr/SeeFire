@@ -17,10 +17,13 @@
 # Ön L298N: Motor 1 (OUT1/2), Motor 2 (OUT3/4)
 # Arka L298N: Motor 3 (OUT1/2), Motor 4 (OUT3/4)
 # Her iki sürücünün IN ve EN pinleri aynı GPIO'ya paralel bağlı.
-PIN_IN1 = 17      # Sol yön A  (Motor 1+3) — her iki L298N IN1'e paralel
-PIN_IN2 = 18      # Sol yön B  (Motor 1+3) — her iki L298N IN2'ye paralel
-PIN_IN3 = 27      # Sağ yön A  (Motor 2+4) — her iki L298N IN3'e paralel
-PIN_IN4 = 22      # Sağ yön B  (Motor 2+4) — her iki L298N IN4'e paralel
+# Polarite (fiziksel test ile doğrulandı 2026-06-03):
+#   Sol ileri:  IN1=LOW,  IN2=HIGH  |  Sol geri:  IN1=HIGH, IN2=LOW
+#   Sağ ileri:  IN3=HIGH, IN4=LOW   |  Sağ geri:  IN3=LOW,  IN4=HIGH
+PIN_IN1 = 17      # Sol yön — LOW=ileri  (Motor 1+3) — her iki L298N IN1'e paralel
+PIN_IN2 = 18      # Sol yön — HIGH=ileri (Motor 1+3) — her iki L298N IN2'ye paralel
+PIN_IN3 = 27      # Sağ yön — HIGH=ileri (Motor 2+4) — her iki L298N IN3'e paralel
+PIN_IN4 = 22      # Sağ yön — LOW=ileri  (Motor 2+4) — her iki L298N IN4'e paralel
 PIN_ENA = 12      # Sol PWM    (Motor 1+3) — her iki L298N ENA'ya paralel (hw PWM)
 PIN_ENB = 13      # Sağ PWM    (Motor 2+4) — her iki L298N ENB'ye paralel (hw PWM)
 
@@ -250,14 +253,16 @@ Pi GPIO13 (Pin 33) ──┬── L298N #1 ENB  →  Motor 2 (FR) hız
                      └── L298N #2 ENB  →  Motor 4 (RR) hız
 ```
 
-### L298N Yön Tablosu (yazılım referansı — her iki sürücü için aynı)
+### L298N Yön Tablosu (fiziksel test ile doğrulandı — 2026-06-03)
+
+> Not: Sol motor polaritesi ters (IN1=L → ileri). Dönüşler tank turn: iki taraf zıt yöne döner.
 
 | Hareket     | IN1 | IN2 | IN3 | IN4 | Etki                                |
 |-------------|:---:|:---:|:---:|:---:|-------------------------------------|
-| İleri       | H   | L   | H   | L   | Motor 1+3 ileri, Motor 2+4 ileri    |
-| Geri        | L   | H   | L   | H   | Motor 1+3 geri, Motor 2+4 geri      |
-| Sol dönüş   | L   | H   | H   | L   | Motor 1+3 geri, Motor 2+4 ileri     |
-| Sağ dönüş   | H   | L   | L   | H   | Motor 1+3 ileri, Motor 2+4 geri     |
+| İleri       | L   | H   | H   | L   | Motor 1+3 ileri, Motor 2+4 ileri    |
+| Geri        | H   | L   | L   | H   | Motor 1+3 geri, Motor 2+4 geri      |
+| Tank sol    | H   | L   | H   | L   | Motor 1+3 geri, Motor 2+4 ileri     |
+| Tank sağ    | L   | H   | L   | H   | Motor 1+3 ileri, Motor 2+4 geri     |
 | Dur         | L   | L   | L   | L   | Tüm motorlar durur                  |
 
 ### Teker Enkoderleri
@@ -394,6 +399,7 @@ Not: GPIO8 (HW CE0) kernel tarafından SPI için tutulabilir.
 | 3 | Her iki L298N üzerindeki **ENA ve ENB jumper'larını çıkar** — yazılım PWM kullanıyor. |
 | 4 | Her iki L298N **"5V" terminali boşta** — onboard regülatör kullanılmıyor. |
 | 11 | İki L298N'in IN/EN pinleri **paralel bağlı** — kablo kopuklarında tek taraf çalışmayı bırakır, kontrol et. |
+| 12 | Sol motor polaritesi **ters**: IN1=LOW/IN2=HIGH → ileri. Sağ motor **standart**: IN3=HIGH/IN4=LOW → ileri. Yazılım buna göre ayarlanmış. |
 | 5 | MLX90614 kablosu **max 20cm** — uzunsa I²C bus kilitlenir. |
 | 6 | MQ-2 açılışta **60 saniye ısınma** bekle — ilk okumalar geçersiz. |
 | 7 | MCP3008 **çentik yukarı** bakacak şekilde takılmalı — ters takılırsa yanar. |
@@ -418,6 +424,9 @@ Not: GPIO8 (HW CE0) kernel tarafından SPI için tutulabilir.
 [ ] 6 sinyal kablosu (IN1-4 + ENA + ENB) her iki L298N'e paralel bağlı
 [ ] Her iki L298N VS → 7.4V rayı bağlı
 [ ] Her iki L298N GND → ortak GND rayı bağlı
+[ ] W tuşu → 4 teker ileri dönüyor (tank turn testi)
+[ ] A tuşu → sol çift geri, sağ çift ileri (tank sol)
+[ ] D tuşu → sol çift ileri, sağ çift geri (tank sağ)
 [ ] 3 adet HC-SR04 ECHO bölücü devresi kuruldu ve ~3.18V ölçüldü
 [ ] MCP3008 çentik yönü doğru
 [ ] MLX90614 i2cdetect ile 0x5A adresinde görünüyor
