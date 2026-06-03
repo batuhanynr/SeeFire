@@ -27,12 +27,12 @@ class MotorM2:
     """
     Motor control class for SeeFire robot.
     
-    Movement Pin Logic (L298N ×2, parallel GPIO signals to both drivers):
-    - Forward:  IN1=HIGH, IN2=LOW  (Left)  | IN3=HIGH, IN4=LOW  (Right)
-    - Backward: IN1=LOW,  IN2=HIGH (Left)  | IN3=LOW,  IN4=HIGH (Right)
-    - Turn Right: IN1=HIGH, IN2=LOW (Left) | IN3=LOW,  IN4=HIGH (Right)
-    - Turn Left:  IN1=LOW,  IN2=HIGH (Left) | IN3=HIGH, IN4=LOW  (Right)
-    - Stop:     All LOW
+    Movement Pin Logic (L298N ×2, front/rear split — each motor on its own channel):
+    - Forward:    IN1=HIGH, IN2=LOW  (Left)  | IN3=HIGH, IN4=LOW  (Right)
+    - Backward:   IN1=LOW,  IN2=HIGH (Left)  | IN3=LOW,  IN4=HIGH (Right)
+    - Turn Right: IN1=HIGH, IN2=LOW  (Left FORWARD) | IN3=LOW, IN4=HIGH (Right BACKWARD)  ← true pivot
+    - Turn Left:  IN1=LOW,  IN2=HIGH (Left BACKWARD) | IN3=HIGH, IN4=LOW (Right FORWARD)  ← true pivot
+    - Stop:       All LOW
     """
     def __init__(self):
         self._initialized = False
@@ -163,6 +163,8 @@ class MotorM2:
     def motor_turn(self, angle: float, speed: int) -> None:
         """
         Turns the robot right for positive angle, left for negative angle.
+        True pivot: left motors and right motors spin in opposite directions.
+        Requires dual L298N (front/rear split) so each motor has its own channel.
         """
         speed = max(0, min(100, speed))
         
@@ -173,12 +175,12 @@ class MotorM2:
         if not self._initialized:
             return
 
-        # Pivot turning: one side forward, the other stopped (0) to prevent battery/driver overload
-        if angle > 0: # Turn Right
+        # True pivot: left forward + right backward (or vice versa)
+        if angle > 0:   # Turn Right
             self._set_left_motor(speed)
-            self._set_right_motor(0)
+            self._set_right_motor(-speed)
         elif angle < 0: # Turn Left
-            self._set_left_motor(0)
+            self._set_left_motor(-speed)
             self._set_right_motor(speed)
         else:
             self.motor_stop()
@@ -193,6 +195,8 @@ class MotorM2:
             self._set_right_motor(0)
 
     def _set_left_motor(self, speed: int):
+        # Left motor polarity is physically inverted vs right motor.
+        # speed>0 (forward): IN1=LOW, IN2=HIGH
         trimmed_speed = int(abs(speed) * getattr(config, "LEFT_MOTOR_TRIM", 1.0))
         trimmed_speed = max(0, min(100, trimmed_speed))
         if speed > 0:
@@ -305,16 +309,19 @@ class MotorM2:
         self._turn_in_place(direction=+1)
 
     def _turn_in_place(self, direction: int) -> None:
-        """direction: +1 right, -1 left. Time-based; encoder differential not used here."""
+        """True pivot spin: left and right motors run in opposite directions.
+        direction: +1 right, -1 left. Time-based; encoder differential not used here.
+        Requires dual L298N (front/rear split) so both sides drive simultaneously.
+        """
         if MOCK_MODE:
             logger.debug("[MOCK] turn_in_place: %s", "right" if direction > 0 else "left")
         else:
             speed = config.TURN_SPEED
-            if direction > 0:
+            if direction > 0:  # Right: left forward, right backward
                 self._set_left_motor(speed)
-                self._set_right_motor(0)
-            else:
-                self._set_left_motor(0)
+                self._set_right_motor(-speed)
+            else:              # Left: left backward, right forward
+                self._set_left_motor(-speed)
                 self._set_right_motor(speed)
 
         time.sleep(config.MOCK_TURN_90_SECONDS)

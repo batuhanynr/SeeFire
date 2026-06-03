@@ -105,14 +105,14 @@ LEFT_MOTOR_TRIM = 0.90
 RIGHT_MOTOR_TRIM = 1.0
 # Time-based fallback for distance/turn when no encoder is wired (mock or hardware-absent)
 MOCK_CM_PER_SEC      = 20.0  # nominal forward speed at DRIVE_SPEED duty
-MOCK_TURN_90_SECONDS = 2.5   # nominal time for 90° pivot turn at TURN_SPEED (increased to 2.5s for pivot sweep)
+MOCK_TURN_90_SECONDS = 1.3   # nominal time for 90° true pivot at TURN_SPEED (dual L298N, both sides active)
 
 # --- Battery Characteristics (2S Li-ion) ---
 BATTERY_MAX_V     = 8.4   # Full charge
 BATTERY_NOMINAL_V = 7.4   # Typical
 BATTERY_LOW_V     = 6.8   # Warning threshold
 BATTERY_CRIT_V    = 6.4   # Emergency stop / cutoff
-BYPASS_BATTERY_CHECK = True  # Set to True to ignore critical battery shutdown during testing
+BYPASS_BATTERY_CHECK = False  # Set to True to ignore critical battery shutdown during testing
 BATTERY_ADC_CH    = 1     # Which MCP3208 channel
 VDIV_R1           = 20000.0 # 20k Ohm
 VDIV_R2           = 10000.0 # 10k Ohm (V_ADC = V_BAT * R2/(R1+R2))

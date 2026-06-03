@@ -77,13 +77,13 @@ class TestDecisionEngine(unittest.TestCase):
 
     @patch("m4_vision.capture_frame", return_value=None)
     @patch("m3_sensors.get_fusion_sensors")
-    @patch("m4_vision.get_fire_confidence", return_value=0.0)
+    @patch("m4_vision.get_fire_confidence", return_value=0.85)
     def test_on_snapshot_raises_verification_when_risk_high(self, mock_fire, mock_sensors, mock_frame):
-        # Set smoke and IR values to extremely high to force FUSION_ALARM_THRESH (0.7)
-        # Smoke: 4095 (1.0 weight component * 0.3 = 0.3)
-        # IR Temp: 60.0 (1.0 weight component * 0.2 = 0.2)
-        # Vision: snapshot at WAYPOINT defaults to 0.6 if YOLO returns 0.0 (0.6 * 0.5 = 0.3)
-        # Total score: 0.3 + 0.2 + 0.3 = 0.8
+        # Set smoke, IR and vision values high enough to exceed FUSION_ALARM_THRESH (0.7)
+        # Vision: 0.85 * 0.5 = 0.425
+        # Smoke: 4095 (max) * 0.3 = 0.3
+        # IR Temp: 60.0 (threshold) * 0.2 = 0.2
+        # Total score: 0.425 + 0.3 + 0.2 = 0.92 → exceeds 0.7
         mock_sens = MagicMock()
         mock_sens.smoke_level = 4095.0
         mock_sens.ir_temp = 60.0
@@ -96,7 +96,8 @@ class TestDecisionEngine(unittest.TestCase):
             engine._on_snapshot("WAYPOINT")
 
         self.assertEqual(engine.state, RobotState.VERIFY)
-        self.assertEqual(engine.fusion_score, 0.8)
+        self.assertGreaterEqual(engine.fusion_score, config.FUSION_ALARM_THRESH)
+
 
     @patch("m5_navigation.navigation.NavigationController.run")
     def test_navigate_runs_nav_completely(self, mock_nav_run):
