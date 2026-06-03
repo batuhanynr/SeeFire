@@ -30,6 +30,7 @@ the drive loop stays fast (20 Hz). Encoders are interrupt-driven.
 Run on Raspberry Pi from the SeeFire repo:
     python3 seefire_dashboard.py
 """
+
 from __future__ import annotations
 
 import curses
@@ -41,7 +42,6 @@ from pathlib import Path
 from typing import Callable
 
 import config
-
 
 PWM_HZ = 1000
 LOOP_DT = 0.05
@@ -77,8 +77,12 @@ class DriveHardware:
     def init(self, gpio) -> None:
         self.gpio = gpio
         pins = [
-            config.MOTOR_IN1, config.MOTOR_IN2, config.MOTOR_IN3,
-            config.MOTOR_IN4, config.MOTOR_ENA, config.MOTOR_ENB,
+            config.MOTOR_IN1,
+            config.MOTOR_IN2,
+            config.MOTOR_IN3,
+            config.MOTOR_IN4,
+            config.MOTOR_ENA,
+            config.MOTOR_ENB,
         ]
         for pin in pins:
             gpio.setup(pin, gpio.OUT)
@@ -91,8 +95,18 @@ class DriveHardware:
 
         gpio.setup(config.ENCODER_LEFT_PIN, gpio.IN, pull_up_down=gpio.PUD_DOWN)
         gpio.setup(config.ENCODER_RIGHT_PIN, gpio.IN, pull_up_down=gpio.PUD_DOWN)
-        gpio.add_event_detect(config.ENCODER_LEFT_PIN, gpio.RISING, callback=self._on_left_tick, bouncetime=2)
-        gpio.add_event_detect(config.ENCODER_RIGHT_PIN, gpio.RISING, callback=self._on_right_tick, bouncetime=2)
+        gpio.add_event_detect(
+            config.ENCODER_LEFT_PIN,
+            gpio.RISING,
+            callback=self._on_left_tick,
+            bouncetime=2,
+        )
+        gpio.add_event_detect(
+            config.ENCODER_RIGHT_PIN,
+            gpio.RISING,
+            callback=self._on_right_tick,
+            bouncetime=2,
+        )
 
     def set_drive(self, left: float, right: float) -> None:
         left = max(-100.0, min(100.0, left))
@@ -134,14 +148,14 @@ class DriveHardware:
         self.pwm_a.ChangeDutyCycle(abs(speed))
 
     def _set_right(self, speed: float) -> None:
-        # Polarity inverted vs wiring: speed>0 (forward) drives IN3 LOW / IN4 HIGH.
+        # Tested polarity: speed>0 (forward) drives IN3 HIGH / IN4 LOW.
         gpio = self.gpio
         if speed > 0:
-            gpio.output(config.MOTOR_IN3, gpio.LOW)
-            gpio.output(config.MOTOR_IN4, gpio.HIGH)
-        elif speed < 0:
             gpio.output(config.MOTOR_IN3, gpio.HIGH)
             gpio.output(config.MOTOR_IN4, gpio.LOW)
+        elif speed < 0:
+            gpio.output(config.MOTOR_IN3, gpio.LOW)
+            gpio.output(config.MOTOR_IN4, gpio.HIGH)
         else:
             gpio.output(config.MOTOR_IN3, gpio.LOW)
             gpio.output(config.MOTOR_IN4, gpio.LOW)
@@ -216,12 +230,12 @@ class RideController:
                 return inner, base, f"{dir_label} sol"
             return base, base, dir_label
 
-        # Stationary: pivot turn (one side driven, other coasts).
+        # Stationary: tank turn (sides spin opposite directions).
         turn = max_pwm * TURN_SCALE
         if right_key:
-            return turn, 0.0, "Pivot sag"
+            return turn, -turn, "Tank sag"
         if left_key:
-            return 0.0, turn, "Pivot sol"
+            return -turn, turn, "Tank sol"
         return 0.0, 0.0, "Bos"
 
     def tick(self) -> None:
@@ -267,12 +281,14 @@ class SensorHub:
         self.smbus_cls = None
         self.cv2 = None
         self.camera_device = 0
-        self.snapshot_dir = Path(__file__).resolve().parent / "runtime_data" / "snapshots"
+        self.snapshot_dir = (
+            Path(__file__).resolve().parent / "runtime_data" / "snapshots"
+        )
         self.photo_count = 0
         self.photo_status = "P ile foto cek"
 
-        self.active: dict[str, str] = {}          # key -> label
-        self.values: dict[str, str] = {}          # key -> latest formatted value
+        self.active: dict[str, str] = {}  # key -> label
+        self.values: dict[str, str] = {}  # key -> latest formatted value
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -282,6 +298,7 @@ class SensorHub:
         if self.spi is not None:
             return self.spi
         import spidev
+
         self.gpio.setup(config.MQ2_CS_PIN, self.gpio.OUT)
         self.gpio.output(config.MQ2_CS_PIN, self.gpio.HIGH)
         spi = spidev.SpiDev()
@@ -295,6 +312,7 @@ class SensorHub:
         if self.smbus_cls is not None:
             return self.smbus_cls
         from smbus2 import SMBus
+
         self.smbus_cls = SMBus
         return SMBus
 
@@ -394,7 +412,9 @@ class SensorHub:
                 self.values[key] = detail
                 statuses.append(SensorStatus(key, label, True, detail))
             except Exception as exc:
-                statuses.append(SensorStatus(key, label, False, f"{type(exc).__name__}: {exc}"))
+                statuses.append(
+                    SensorStatus(key, label, False, f"{type(exc).__name__}: {exc}")
+                )
 
         # Camera probe (capture happens on demand).
         cam = SensorStatus("camera", "Kamera (P foto)", False, "")
@@ -403,10 +423,18 @@ class SensorHub:
             if not dev.exists():
                 raise RuntimeError(f"{dev} yok")
             import cv2
+
             self.cv2 = cv2
-            cam = SensorStatus("camera", "Kamera (P foto)", True, f"/dev/video{self.camera_device} hazir")
+            cam = SensorStatus(
+                "camera",
+                "Kamera (P foto)",
+                True,
+                f"/dev/video{self.camera_device} hazir",
+            )
         except Exception as exc:
-            cam = SensorStatus("camera", "Kamera (P foto)", False, f"{type(exc).__name__}: {exc}")
+            cam = SensorStatus(
+                "camera", "Kamera (P foto)", False, f"{type(exc).__name__}: {exc}"
+            )
         statuses.append(cam)
         return statuses
 
@@ -491,7 +519,7 @@ def ask_speed_level() -> int:
 
 def fmt_power(value: float) -> str:
     direction = "FWD" if value > 0 else "REV" if value < 0 else "OFF"
-    return f"{direction:<3} {abs(value):05.1f}%"   # fixed 10 chars
+    return f"{direction:<3} {abs(value):05.1f}%"  # fixed 10 chars
 
 
 def fmt_dist(value: str, width: int = 8) -> str:
@@ -532,14 +560,23 @@ def draw_main(stdscr, ride: RideController, hub: SensorHub) -> None:
     stdscr.erase()
     width = 100
     _addstr(stdscr, 0, 0, "SeeFire KOKPIT (surus + sensor)".center(width))
-    _addstr(stdscr, 1, 0, f"Hiz level {ride.max_level} | max PWM {ride.max_pwm:.0f}% | {ride.message}".center(width))
+    _addstr(
+        stdscr,
+        1,
+        0,
+        f"Hiz level {ride.max_level} | max PWM {ride.max_pwm:.0f}% | {ride.message}".center(
+            width
+        ),
+    )
     _addstr(stdscr, 2, 0, "=" * width)
-    _addstr(stdscr, 3, 2, "W ileri | S geri | A sol | D sag | SPACE dur | P foto | Q cikis")
+    _addstr(
+        stdscr, 3, 2, "W ileri | S geri | A sol | D sag | SPACE dur | P foto | Q cikis"
+    )
 
     # --- robot + ultrasonics (top), fixed-width grid so columns stay aligned ---
-    LM = 4          # left screen margin
-    GUT = 15        # left gutter width (wheel/sensor labels), bar aligns here
-    INNER = 24      # box interior width
+    LM = 4  # left screen margin
+    GUT = 15  # left gutter width (wheel/sensor labels), bar aligns here
+    INNER = 24  # box interior width
     box_x = LM + GUT + 1
     border = " " * GUT + "+" + "-" * INNER + "+"
 
@@ -554,8 +591,18 @@ def draw_main(stdscr, ride: RideController, hub: SensorHub) -> None:
     _addstr(stdscr, 10, LM, row(f"RL {pl} ", "", f" RR {pr}"))
     _addstr(stdscr, 11, LM, border)
 
-    _addstr(stdscr, 13, LM, f"Sol kanal: {ride.rpm_left:6.1f} rpm  {ride.speed_left:6.1f} cm/s  ({ride.speed_left*0.036:4.2f} km/h)  tick {ride.hw.left_ticks}")
-    _addstr(stdscr, 14, LM, f"Sag kanal: {ride.rpm_right:6.1f} rpm  {ride.speed_right:6.1f} cm/s  ({ride.speed_right*0.036:4.2f} km/h)  tick {ride.hw.right_ticks}")
+    _addstr(
+        stdscr,
+        13,
+        LM,
+        f"Sol kanal: {ride.rpm_left:6.1f} rpm  {ride.speed_left:6.1f} cm/s  ({ride.speed_left * 0.036:4.2f} km/h)  tick {ride.hw.left_ticks}",
+    )
+    _addstr(
+        stdscr,
+        14,
+        LM,
+        f"Sag kanal: {ride.rpm_right:6.1f} rpm  {ride.speed_right:6.1f} cm/s  ({ride.speed_right * 0.036:4.2f} km/h)  tick {ride.hw.right_ticks}",
+    )
 
     # --- data sensors (bottom) ---
     _addstr(stdscr, 16, 0, "-" * width)
@@ -596,8 +643,15 @@ def curses_main(stdscr, level: int) -> int:
         hw.init(GPIO)
         statuses = hub.probe()
         # Drive/encoders status from successful init.
-        statuses.insert(0, SensorStatus("drive", "Motor + Enkoder", True,
-                                        f"L298N ×2 + enc GPIO{config.ENCODER_LEFT_PIN}/{config.ENCODER_RIGHT_PIN}"))
+        statuses.insert(
+            0,
+            SensorStatus(
+                "drive",
+                "Motor + Enkoder",
+                True,
+                f"L298N ×2 + enc GPIO{config.ENCODER_LEFT_PIN}/{config.ENCODER_RIGHT_PIN}",
+            ),
+        )
 
         # 5 s check screen.
         end = time.monotonic() + CHECK_SECONDS
@@ -653,4 +707,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(main())

@@ -8,8 +8,7 @@ import threading
 import time
 from enum import Enum, auto
 from m2_motor import motor
-from m5_navigation.navigation import NavigationController
-from m5_navigation.obstacle import ObstacleBlockedError
+from m5_navigation.navigation import NavigationController, ObstacleBlockedError
 import m7_logging
 
 logger = logging.getLogger(__name__)
@@ -50,8 +49,8 @@ class DecisionEngine:
         fire_conf = m4_vision.get_fire_confidence()
 
         # 2. Logic to update global fusion score
-        # Use fire confidence from YOLO if available, otherwise mock detection on waypoints
-        vision_conf = max(fire_conf, 0.6 if label == "WAYPOINT" else 0.1)
+        # Use real fire confidence from YOLO only — no artificial floor
+        vision_conf = max(fire_conf, 0.0)
         
         self.fusion_score = self._calculate_fusion_score(
             vision_conf=vision_conf,
