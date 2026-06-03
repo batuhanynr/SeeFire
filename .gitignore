@@ -29,3 +29,9 @@ demo_data/
 # IDE/Agent configuration
 # CLAUDE.md is intentionally tracked — contains project architecture docs
 
+# YOLO training artifacts (large, not needed in repo)
+datasets/
+runs/
+yolov8n.pt
+*.zip
+

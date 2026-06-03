@@ -54,7 +54,21 @@ class ObstacleAvoidance:
 
         reference_distance: front_cm at the moment the obstacle was detected.
         """
-        direction = self._decide_direction()
+        # Robot engelin önünde (muhtemelen açılı/yakın) durdu.
+        # Sol ve sağ açıklığı ölç, açık tarafa yönel.
+        direction = self._choose_open_side()
+
+        if direction is None:
+            # İki taraf da dar → dar boşluğa sıkışma! Geri çekil, tekrar ölç.
+            logger.warning("[OBSTACLE] Her iki yan da dar. Sıkışmayı önlemek için geri çekiliyor.")
+            self._back_up(config.OBSTACLE_BACKUP_CM)
+            direction = self._choose_open_side()
+            if direction is None:
+                m2_motor.stop()
+                raise ObstacleBlockedError(
+                    "Engelin arasına sıkışıldı — her iki yan da kapalı."
+                )
+
         logger.info("[OBSTACLE] D0=%.1f cm. Bypass direction: %s",
                     reference_distance, direction)
 
@@ -183,13 +197,61 @@ class ObstacleAvoidance:
         m2_motor.drive_distance_cm(cm)
         m2_motor.set_total_distance_cm(before)
 
-    def _decide_direction(self) -> str:
+    def _choose_open_side(self):
+        """Sol/sağ ultrasonik açıklığı ölçüp bypass için açık tarafı seç.
+
+        Öncelik: ultrasonik açıklık (gerçek boşluk). Kamera ipucu yalnızca
+        iki taraf benzerken (fark < marj) tie-breaker olarak kullanılır.
+
+        Dönüş:
+          "LEFT" | "RIGHT" — bypass yönü
+          None             — iki taraf da MIN_SIDE_CLEARANCE_CM altında
+                             (dar boşluk → sıkışma riski).
+        """
+        reading = m3_sensors.get_navigation_sensors_filtered(samples=3)
+        left, right = reading.left_cm, reading.right_cm
+        logger.info(
+            "[OBSTACLE] Yan açıklık — Sol: %.1f cm | Sağ: %.1f cm | Ön: %.1f cm",
+            left, right, reading.front_cm,
+        )
+
+        # Geçersiz/menzil-aşımı okuma (0 veya negatif) → "açık" varsay.
+        left_ok = left if left > 0 else 999.0
+        right_ok = right if right > 0 else 999.0
+
+        min_clear = getattr(config, "MIN_SIDE_CLEARANCE_CM", 40.0)
+        margin = getattr(config, "SIDE_DECISION_MARGIN_CM", 20.0)
+
+        # İki taraf da çok dar → sıkışma riski, bypass etme.
+        if left_ok < min_clear and right_ok < min_clear:
+            logger.warning(
+                "[OBSTACLE] İki yan da dar (sol=%.1f, sağ=%.1f < %.0f cm).",
+                left_ok, right_ok, min_clear,
+            )
+            return None
+
+        # Belirgin fark → daha açık tarafa dön.
+        if abs(left_ok - right_ok) >= margin:
+            chosen = "RIGHT" if right_ok > left_ok else "LEFT"
+            logger.info("[OBSTACLE] Açık taraf (ultrasonik): %s", chosen)
+            return chosen
+
+        # Benzer açıklık → kamera ipucu, yoksa marjinal olarak açık taraf.
         hint = m4_vision.determine_turn_direction()
         if hint in ("LEFT", "RIGHT"):
+            logger.info("[OBSTACLE] Yanlar benzer — kamera ipucu: %s", hint)
             return hint
+        return "RIGHT" if right_ok >= left_ok else "LEFT"
 
-        reading = m3_sensors.get_navigation_sensors_filtered()
-        return "RIGHT" if reading.right_cm > reading.left_cm else "LEFT"
+    def _back_up(self, cm: float) -> None:
+        """Sıkışma/çok yakın durumunda `cm` kadar geri git (odometreyi kirletmez)."""
+        logger.info("[OBSTACLE] %.0f cm geri gidiliyor.", cm)
+        before = m2_motor.get_total_distance_cm()
+        m2_motor.motor_drive("backward", config.DRIVE_SPEED)
+        time.sleep(cm / max(config.MOCK_CM_PER_SEC, 5.0))
+        m2_motor.stop()
+        m2_motor.set_total_distance_cm(before)
+        time.sleep(0.5)
 
     def _side_pass(self, sector_id: int, direction: str,
                    reference_distance: float):

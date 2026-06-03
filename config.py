@@ -64,7 +64,16 @@ STEP_DISTANCE_CM = 5.0
 SIDE_STEP_CM = 5.0
 
 # Obstacle thresholds (front sensor)
-OBSTACLE_THRESHOLD_CM = 55.0   # below this → obstacle, trigger avoidance
+OBSTACLE_THRESHOLD_CM = 30.0   # below this → obstacle, trigger avoidance
+OBSTACLE_CLOSE_CM     = 10.0   # below this → back up before turning
+OBSTACLE_BACKUP_CM    = 15.0   # how far to reverse when too close
+
+# Bypass yön kararı (sol/sağ ultrasonik açıklık)
+# Bir tarafı bypass için seçmek için o tarafta EN AZ bu kadar boşluk olmalı.
+# İki taraf da bunun altındaysa robot dar boşluğa sıkışmaz → geri çekilir.
+MIN_SIDE_CLEARANCE_CM   = 40.0
+# Sol/sağ farkı bu marjdan azsa "eşit" sayılır → kamera ipucuna bakılır.
+SIDE_DECISION_MARGIN_CM = 20.0
 
 # Side-pass dynamic clearance: clearance-side sensor must exceed D₀ + delta
 # to declare the obstacle cleared. D₀ is the front reading at detection time.
@@ -98,14 +107,19 @@ WHEEL_DIAMETER_MM = 66.0
 
 # Drive parameters
 DRIVE_SPEED = 60   # PWM duty cycle 0-100 for forward
-TURN_SPEED  = 60   # PWM duty cycle 0-100 for turning (reduced for slower, controlled turns)
+TURN_SPEED  = 90   # PWM duty cycle 0-100 for turning (high torque — pivot stall'ı önler)
+# Dönüş başında statik sürtünmeyi kırmak için kısa tam-güç darbesi (kick-start)
+TURN_KICK_SPEED   = 100  # kick sırasında PWM (0-100)
+TURN_KICK_SECONDS = 0.15 # kick süresi (toplam dönüş süresinden düşülür)
 # Motor speed trims to correct forward drift (1.0 = no trim)
 # If the robot drifts right, decrease LEFT_MOTOR_TRIM (e.g. 0.90)
 LEFT_MOTOR_TRIM = 1.0
 RIGHT_MOTOR_TRIM = 1.0
 # Time-based fallback for distance/turn when no encoder is wired (mock or hardware-absent)
 MOCK_CM_PER_SEC      = 20.0  # nominal forward speed at DRIVE_SPEED duty
-MOCK_TURN_90_SECONDS = 1.05  # nominal time for 90° true pivot at TURN_SPEED (dual L298N, both sides active)
+# 90° pivot süresi @ TURN_SPEED. NOT: TURN_SPEED arttığı için bu küçültüldü.
+# FİZİKSEL KALİBRASYON: dönüş 90°'yi aşıyorsa bu değeri düşür, az dönüyorsa artır.
+MOCK_TURN_90_SECONDS = 0.80
 
 # --- Battery Characteristics (2S Li-ion) ---
 BATTERY_MAX_V     = 8.4   # Full charge

@@ -200,6 +200,14 @@ class SensorsM3:
             timestamp=time.time(),
         )
 
+    def get_front_distance(self, samples: int = 2) -> float:
+        """Sadece ön sensörü hızlı oku (median). Sürüş sırasında düşük gecikmeli
+        engel STOP kararı için. Tam 3-sensör filtreli okumadan çok daha hızlı."""
+        vals = []
+        for _ in range(max(1, samples)):
+            vals.append(self._read_ultrasonic(config.TRIG_FRONT, config.ECHO_FRONT))
+        return median(vals)
+
     def read_battery_adc(self) -> int:
         """Expose Battery ADC channel for M2"""
         return self._read_mcp3208(config.BATTERY_ADC_CH)
@@ -225,5 +233,6 @@ init_sensors = _instance.init_sensors
 get_fusion_sensors = _instance.get_fusion_sensors
 get_navigation_sensors = _instance.get_navigation_sensors
 get_navigation_sensors_filtered = _instance.get_navigation_sensors_filtered
+get_front_distance = _instance.get_front_distance
 read_battery_adc = _instance.read_battery_adc
 cleanup = _instance.cleanup

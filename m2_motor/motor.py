@@ -312,11 +312,21 @@ class MotorM2:
         """True pivot spin: left and right motors run in opposite directions.
         direction: +1 right, -1 left. Time-based; encoder differential not used here.
         Requires dual L298N (front/rear split) so both sides drive simultaneously.
+
+        Kick-start: dönüş başında kısa süre tam güç verilir (statik sürtünmeyi kır),
+        ardından TURN_SPEED'e düşülür. Toplam süre = MOCK_TURN_90_SECONDS sabit kalır.
         """
         if MOCK_MODE:
             logger.debug("[MOCK] turn_in_place: %s", "right" if direction > 0 else "left")
-        else:
-            speed = config.TURN_SPEED
+            time.sleep(config.MOCK_TURN_90_SECONDS)
+            self.stop()
+            return
+
+        kick_speed = getattr(config, "TURN_KICK_SPEED", config.TURN_SPEED)
+        kick_time = getattr(config, "TURN_KICK_SECONDS", 0.0)
+        run_speed = config.TURN_SPEED
+
+        def _apply(speed):
             if direction > 0:  # Right: left forward, right backward
                 self._set_left_motor(speed)
                 self._set_right_motor(-speed)
@@ -324,7 +334,13 @@ class MotorM2:
                 self._set_left_motor(-speed)
                 self._set_right_motor(speed)
 
-        time.sleep(config.MOCK_TURN_90_SECONDS)
+        # 1) Kick: tam güç darbesi
+        if kick_time > 0:
+            _apply(kick_speed)
+            time.sleep(kick_time)
+        # 2) Kalan süre: normal dönüş hızı
+        _apply(run_speed)
+        time.sleep(max(0.0, config.MOCK_TURN_90_SECONDS - kick_time))
         self.stop()
 
     def cleanup(self) -> None:

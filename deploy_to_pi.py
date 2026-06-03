@@ -14,6 +14,10 @@ def main():
         "--exclude", "__pycache__",
         "--exclude", "*.pyc",
         "--exclude", ".claude",
+        "--exclude", "datasets/",
+        "--exclude", "runs/",
+        "--exclude", "yolov8n.pt",
+        "--exclude", "*.zip",
         "-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
         "./",
         "raspberry@192.168.138.141:~/SeeFire/"

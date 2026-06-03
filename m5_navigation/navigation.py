@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 # ── Navigasyon sabitleri ────────────────────────────────────────────────────
 SEGMENT_CM            = 500.0   # 5 metre segment uzunluğu
-SCAN_WAIT_S           = 3.0     # 360° taramada her yön sonrası bekleme (s)
+SCAN_WAIT_S           = 0.8     # taramada her yön sonrası kamera bekleme (s)
 CENTER_TOLERANCE_CM   = 25.0    # Sol-sağ fark toleransı (cm) — bu altı "merkez"
 CENTERING_INTERVAL_CM = 150.0   # Kaç cm'de bir merkez kontrolü yapılır
 MAX_SEGMENTS          = 20      # Azami segment sayısı (güvenlik)
@@ -92,9 +92,9 @@ class NavigationController:
             
             self._drive_segment(segment_number)
             
-            logger.info("[NAV] Segment %d tamamlandı. 360° tarama başlıyor.",
+            logger.info("[NAV] Segment %d tamamlandı. 3 yönlü tarama başlıyor.",
                         segment_number)
-            self._scan_360(segment_number)
+            self._scan_three_directions(segment_number)
             
             segment_number += 1
 
@@ -200,22 +200,48 @@ class NavigationController:
                 except ImportError:
                     pass
 
-                # 5. Engel kontrolü
-                reading = m3_sensors.get_navigation_sensors_filtered()
-                front_cm = reading.front_cm
-                logger.info("[ULTRASONIC] Sol: %.1f cm | Ön: %.1f cm | Sağ: %.1f cm", 
-                            reading.left_cm, front_cm, reading.right_cm)
+                # 5. Engel kontrolü — HIZLI ön okuma (düşük gecikme → erken tepki)
+                front_fast = m3_sensors.get_front_distance(samples=2)
 
-                if 0 < front_cm <= config.OBSTACLE_THRESHOLD_CM:
-                    logger.warning(
-                        "[ENGEL] Önde engel: %.1f cm. Sürüş durduruluyor ve bypass manevrası başlatılıyor...",
-                        front_cm)
+                if 0 < front_fast <= config.OBSTACLE_THRESHOLD_CM:
+                    # Önce DUR, sonra teyit et (hareket halindeyken kör ilerlemeyi kes)
                     m2_motor.stop()
                     is_driving = False
+
+                    # Median ile teyit: yanlış yansıma/gürültü mü, gerçek engel mi?
+                    confirm = m3_sensors.get_navigation_sensors_filtered(samples=3)
+                    front_cm = confirm.front_cm
+                    logger.info("[ULTRASONIC] Sol: %.1f | Ön: %.1f (hızlı:%.1f) | Sağ: %.1f cm",
+                                confirm.left_cm, front_cm, front_fast, confirm.right_cm)
+
+                    if not (0 < front_cm <= config.OBSTACLE_THRESHOLD_CM):
+                        # Yanlış alarm — sürüşe devam
+                        logger.info("[ENGEL] Teyit edilemedi (%.1f cm) — sürüşe devam.", front_cm)
+                        m2_motor.reset_encoder_window()
+                        m2_motor.motor_drive("forward", config.DRIVE_SPEED)
+                        is_driving = True
+                        time.sleep(0.05)
+                        continue
+
+                    logger.warning("[ENGEL] Önde engel: %.1f cm. Bypass başlatılıyor.", front_cm)
 
                     # Güncel penceredeki mesafeyi odometer'a kaydet
                     current_window = m2_motor.get_measured_distance_cm()
                     m2_motor.set_total_distance_cm(current_total + current_window)
+
+                    # Snapshot al
+                    fire_conf = m4_vision.get_fire_confidence()
+                    logger.info("[ENGEL] Snapshot alınıyor. Fire: %.2f", fire_conf)
+                    self._snapshot_cb(f"obstacle-seg{segment_id}-{front_cm:.0f}cm")
+
+                    # Çok yakınsa önce geri git
+                    if 0 < front_cm < config.OBSTACLE_CLOSE_CM:
+                        logger.info("[ENGEL] Çok yakın (%.1f cm) — %.0f cm geri gidiliyor.",
+                                    front_cm, config.OBSTACLE_BACKUP_CM)
+                        m2_motor.motor_drive("backward", config.DRIVE_SPEED)
+                        time.sleep(config.OBSTACLE_BACKUP_CM / max(config.MOCK_CM_PER_SEC, 5.0))
+                        m2_motor.stop()
+                        time.sleep(0.5)
 
                     # Kaçınma manevrasını başlat
                     from m5_navigation.position import PositionVerifier
@@ -268,28 +294,59 @@ class NavigationController:
         m2_motor.set_total_distance_cm(current_total + final_window)
 
     # ──────────────────────────────────────────────────────────────────────
-    # 360° tarama
+    # 3 yönlü tarama (ön → sağ → sol → ön)
     # ──────────────────────────────────────────────────────────────────────
 
-    def _scan_360(self, segment_id: int) -> None:
-        """Robot durur, 4 × (90° sağa dön + bekleme + snapshot).
-        Net dönüş = 360° → robot orijinal yönüne geri döner.
+    def _scan_three_directions(self, segment_id: int) -> None:
+        """Robot durur. Ön, sağ ve sol yönleri snapshot + sensör ile tarar.
+        Net dönüş = 0° → robot orijinal yönüne geri döner.
+
+        Sıra: ön bak → sağa 90° → sağa bak → sola 90° → sola 90° → sola bak
+              → sağa 90° → ön kontrol → devam
         """
         m2_motor.stop()
         time.sleep(0.3)
-        logger.info("[SCAN] 360° tarama başlıyor (segment %d).", segment_id)
+        logger.info("[SCAN] 3 yönlü tarama başlıyor (segment %d).", segment_id)
 
-        directions = ["K", "D", "G", "B"]  # Kuzey, Doğu, Güney, Batı
-        for i, direction in enumerate(directions):
-            label = f"seg{segment_id}-{direction}"
-            logger.info("[SCAN] Yön: %s — snapshot: %s", direction, label)
-            self._snapshot_cb(label)
-            time.sleep(SCAN_WAIT_S)          # Görüntü işleme için bekle
-            m2_motor.turn_right_90()         # Bir sonraki yöne dön
-            time.sleep(0.2)                  # Dönüş sonrası stabilizasyon
+        # --- 1. ÖN ---
+        self._snapshot_cb(f"seg{segment_id}-on")
+        reading = m3_sensors.get_navigation_sensors_filtered()
+        fire_conf = m4_vision.get_fire_confidence()
+        logger.info("[SCAN] ÖN — front=%.0f cm | fire=%.2f", reading.front_cm, fire_conf)
+        time.sleep(SCAN_WAIT_S)
 
-        logger.info("[SCAN] 360° tarama tamamlandı. Robot orijinal yönde.")
-        self._verify_heading_after_scan()
+        # --- 2. SAĞ ---
+        m2_motor.turn_right_90()
+        self._snapshot_cb(f"seg{segment_id}-sag")
+        reading = m3_sensors.get_navigation_sensors_filtered()
+        fire_conf = m4_vision.get_fire_confidence()
+        logger.info("[SCAN] SAĞ — front=%.0f cm | fire=%.2f", reading.front_cm, fire_conf)
+        time.sleep(SCAN_WAIT_S)
+
+        # --- sola dön → sola dön (orijinalden 90° sol) ---
+        m2_motor.turn_left_90()
+        m2_motor.turn_left_90()
+
+        # --- 3. SOL ---
+        self._snapshot_cb(f"seg{segment_id}-sol")
+        reading = m3_sensors.get_navigation_sensors_filtered()
+        fire_conf = m4_vision.get_fire_confidence()
+        logger.info("[SCAN] SOL — front=%.0f cm | fire=%.2f", reading.front_cm, fire_conf)
+        time.sleep(SCAN_WAIT_S)
+
+        # --- orijinal yöne geri dön ---
+        m2_motor.turn_right_90()
+
+        # --- Son ön kontrol ---
+        reading = m3_sensors.get_navigation_sensors_filtered()
+        logger.info("[SCAN] Tarama bitti. Ön: %.0f cm. Devam ediliyor.", reading.front_cm)
+        if 0 < reading.front_cm <= config.OBSTACLE_THRESHOLD_CM:
+            logger.warning("[SCAN] Tarama sonrası önde engel (%.0f cm) — bypass başlatılıyor.",
+                           reading.front_cm)
+            self._snapshot_cb(f"seg{segment_id}-post-scan-engel")
+            from m5_navigation.position import PositionVerifier
+            from m5_navigation.obstacle import ObstacleAvoidance
+            ObstacleAvoidance(PositionVerifier()).avoid(segment_id, reading.front_cm)
 
     # ──────────────────────────────────────────────────────────────────────
     # 360° tarama sonrası görsel yön doğrulama
