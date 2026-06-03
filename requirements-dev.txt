@@ -1,6 +1,5 @@
-# Laptop / geliştirme ortamı için bağımlılıklar
-# (RPi.GPIO, smbus2, spidev gibi Pi'ye özgü paketler YOK)
-# Mock mode otomatik devreye girer.
+# Mac / geliştirme ortamı — RPi'ye özgü paketler YOK
+# Mock mode otomatik devreye girer (RPi.GPIO, smbus2, spidev olmadan)
 
 opencv-python>=4.8.0
 ultralytics>=8.0.0
