@@ -38,21 +38,18 @@ def test_position_verifier_start_aligns_when_off_center(mock_sleep, mock_turn):
         mock_sleep.assert_called_once_with(0.5)
 
 def test_obstacle_avoidance_direction_decision():
-    """Verify that avoidance uses camera hint first, then ultrasonic."""
+    """Verify that avoidance uses ultrasonic sensor readings to decide direction."""
     pv = MagicMock()
     oa = ObstacleAvoidance(pv)
     
-    # 1. Camera says LEFT
-    with patch('m4_vision.determine_turn_direction', return_value="LEFT"):
+    # 1. Left is clearer
+    mock_reading_l = MagicMock(left_cm=50.0, right_cm=20.0)
+    with patch('m3_sensors.get_navigation_sensors_filtered', return_value=mock_reading_l):
         assert oa._decide_direction() == "LEFT"
         
-    # 2. Camera says NONE, ultrasonic says RIGHT is clearer
-    mock_reading = MagicMock()
-    mock_reading.left_cm = 20.0
-    mock_reading.right_cm = 50.0 # Right has more space
-    
-    with patch('m4_vision.determine_turn_direction', return_value=None), \
-         patch('m3_sensors.get_navigation_sensors_filtered', return_value=mock_reading):
+    # 2. Right is clearer
+    mock_reading_r = MagicMock(left_cm=20.0, right_cm=50.0)
+    with patch('m3_sensors.get_navigation_sensors_filtered', return_value=mock_reading_r):
         assert oa._decide_direction() == "RIGHT"
 
 @patch('m2_motor.get_total_distance_cm', return_value=150.0)
@@ -64,8 +61,9 @@ def test_avoidance_maneuver_flow(mock_drive, mock_turn, mock_set_dist, mock_get_
     pv = MagicMock()
     oa = ObstacleAvoidance(pv)
     
-    # Mock camera to force RIGHT
-    with patch('m4_vision.determine_turn_direction', return_value="RIGHT"):
+    # Mock sensors to choose RIGHT (right is clearer)
+    mock_reading = MagicMock(left_cm=20.0, right_cm=50.0)
+    with patch('m3_sensors.get_navigation_sensors_filtered', return_value=mock_reading):
         # Mock the whole bypass attempt: 10 cm side + 20 cm forward.
         with patch.object(ObstacleAvoidance, '_attempt_bypass',
                           return_value=(10.0, 20.0)):
@@ -89,7 +87,8 @@ def test_avoidance_retries_on_wall_hit(mock_drive, mock_turn, mock_set_dist, moc
     # First attempt: wall hit (None). Second: side=10, forward=20.
     attempts = [None, (10.0, 20.0)]
 
-    with patch('m4_vision.determine_turn_direction', return_value="RIGHT"), \
+    mock_reading = MagicMock(left_cm=20.0, right_cm=50.0) # force RIGHT initially
+    with patch('m3_sensors.get_navigation_sensors_filtered', return_value=mock_reading), \
          patch.object(ObstacleAvoidance, '_attempt_bypass',
                       side_effect=attempts) as mock_attempt:
         oa.avoid(sector_id=1, reference_distance=15.0)
@@ -110,7 +109,8 @@ def test_avoidance_aborts_when_both_sides_blocked(mock_drive, mock_turn,
     pv = MagicMock()
     oa = ObstacleAvoidance(pv)
 
-    with patch('m4_vision.determine_turn_direction', return_value="RIGHT"), \
+    mock_reading = MagicMock(left_cm=20.0, right_cm=50.0) # force RIGHT initially
+    with patch('m3_sensors.get_navigation_sensors_filtered', return_value=mock_reading), \
          patch.object(ObstacleAvoidance, '_attempt_bypass', return_value=None):
         with pytest.raises(ObstacleBlockedError):
             oa.avoid(sector_id=1, reference_distance=15.0)
@@ -209,23 +209,23 @@ def test_drive_lateral_preserves_north_progress():
 
 
 def test_four_direction_scan_captures_each_heading():
-    """360° tarama 4 snapshot (K/D/G/B) ve 4 sağa dönüş yapar."""
+    """Verify that scan turns right for D and left for B, capturing both snapshots."""
     from m5_navigation.navigation import NavigationController
 
     captured = []
     with patch('m2_motor.stop'), \
-         patch('m2_motor.turn_right_90') as mock_turn, \
+         patch('m2_motor.turn_right_90') as mock_turn_r, \
+         patch('m2_motor.turn_left_90') as mock_turn_l, \
          patch('time.sleep'):
         nc = NavigationController(snapshot_callback=lambda lbl: captured.append(lbl))
         nc._scan_360(segment_id=1)
 
     assert captured == [
-        "seg1-K",
         "seg1-D",
-        "seg1-G",
         "seg1-B",
     ]
-    assert mock_turn.call_count == 4   # 4×90° = tam tur
+    assert mock_turn_r.call_count == 2
+    assert mock_turn_l.call_count == 2
 
 
 def test_side_pass_detects_wall_via_front_sensor():

@@ -98,14 +98,16 @@ WHEEL_DIAMETER_MM = 66.0
 
 # Drive parameters
 DRIVE_SPEED = 60   # PWM duty cycle 0-100 for forward
-TURN_SPEED  = 60   # PWM duty cycle 0-100 for turning (reduced for slower, controlled turns)
+TURN_SPEED  = 75   # PWM duty cycle 0-100 for turning (increased for more torque/power)
 # Motor speed trims to correct forward drift (1.0 = no trim)
 # If the robot drifts right, decrease LEFT_MOTOR_TRIM (e.g. 0.90)
 LEFT_MOTOR_TRIM = 1.0
-RIGHT_MOTOR_TRIM = 1.0
+RIGHT_MOTOR_TRIM = 0.95
 # Time-based fallback for distance/turn when no encoder is wired (mock or hardware-absent)
 MOCK_CM_PER_SEC      = 20.0  # nominal forward speed at DRIVE_SPEED duty
-MOCK_TURN_90_SECONDS = 1.05  # nominal time for 90° true pivot at TURN_SPEED (dual L298N, both sides active)
+MOCK_TURN_RIGHT_90_SECONDS = 1.18  # nominal time for 90° right pivot at TURN_SPEED
+MOCK_TURN_LEFT_90_SECONDS = 1.08   # nominal time for 90° left pivot at TURN_SPEED
+MOCK_TURN_90_SECONDS = 1.08        # fallback/default nominal time for 90° pivot
 
 # --- Battery Characteristics (2S Li-ion) ---
 BATTERY_MAX_V     = 8.4   # Full charge

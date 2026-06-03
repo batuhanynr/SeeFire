@@ -303,18 +303,17 @@ class MotorM2:
         self._total_distance_cm += distance_cm
 
     def turn_left_90(self) -> None:
-        self._turn_in_place(direction=-1)
+        self.turn_in_place_for_time(direction=-1, duration=config.MOCK_TURN_LEFT_90_SECONDS)
 
     def turn_right_90(self) -> None:
-        self._turn_in_place(direction=+1)
+        self.turn_in_place_for_time(direction=+1, duration=config.MOCK_TURN_RIGHT_90_SECONDS)
 
-    def _turn_in_place(self, direction: int) -> None:
-        """True pivot spin: left and right motors run in opposite directions.
-        direction: +1 right, -1 left. Time-based; encoder differential not used here.
-        Requires dual L298N (front/rear split) so both sides drive simultaneously.
+    def turn_in_place_for_time(self, direction: int, duration: float) -> None:
+        """True pivot spin: left and right motors run in opposite directions for the specified duration.
+        direction: +1 right, -1 left.
         """
         if MOCK_MODE:
-            logger.debug("[MOCK] turn_in_place: %s", "right" if direction > 0 else "left")
+            logger.debug("[MOCK] turn_in_place: %s for %.2fs", "right" if direction > 0 else "left", duration)
         else:
             speed = config.TURN_SPEED
             if direction > 0:  # Right: left forward, right backward
@@ -324,7 +323,7 @@ class MotorM2:
                 self._set_left_motor(-speed)
                 self._set_right_motor(speed)
 
-        time.sleep(config.MOCK_TURN_90_SECONDS)
+        time.sleep(duration)
         self.stop()
 
     def cleanup(self) -> None:
@@ -363,6 +362,7 @@ get_battery_voltage = _instance.get_battery_voltage
 drive_distance_cm = _instance.drive_distance_cm
 turn_left_90 = _instance.turn_left_90
 turn_right_90 = _instance.turn_right_90
+turn_in_place_for_time = _instance.turn_in_place_for_time
 stop = _instance.stop
 
 

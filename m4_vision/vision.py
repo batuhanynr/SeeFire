@@ -426,12 +426,12 @@ class VisionM4:
         if total < 15:  # insufficient visual features
             return None
 
-        # imbalance > 0 → more edges on left → robot drifting right (left wall closer)
+        # imbalance > 0 → more edges on left → robot drifting left (left wall closer)
         imbalance = (left_cnt - right_cnt) / total
         if abs(imbalance) < 0.20:  # within 20% dead band → no correction needed
             return None
-
-        direction = "DRIFT_RIGHT" if imbalance > 0 else "DRIFT_LEFT"
+ 
+        direction = "DRIFT_LEFT" if imbalance > 0 else "DRIFT_RIGHT"
         logger.debug("[VISION] Heading — left: %d  right: %d  imbalance: %.2f → %s",
                      left_cnt, right_cnt, imbalance, direction)
         return direction

@@ -77,3 +77,90 @@ class PositionVerifier:
             m2_motor.drive_distance_cm(config.FINE_TUNE_STEP_CM)
             m2_motor.turn_right_90()
         logger.info("Lateral correction applied (left_err=%.1f cm)", left_err)
+
+    def align_to_corridor(self) -> None:
+        """Align the robot parallel to the corridor walls by minimizing left_cm + right_cm."""
+        import time
+        logger.info("[ALIGN] Hizalama işlemi başlatılıyor...")
+        
+        # Get baseline reading
+        reading = m3_sensors.get_navigation_sensors_filtered(samples=4)
+        best_sum = reading.left_cm + reading.right_cm
+        logger.info("[ALIGN] Başlangıç toplam mesafe: %.1f cm (Sol: %.1f, Sağ: %.1f)", 
+                    best_sum, reading.left_cm, reading.right_cm)
+        
+        expected_width = config.START_LEFT_CM + config.START_RIGHT_CM
+        width_tol = 2.0 * config.POSITION_TOLERANCE_CM
+        if abs(best_sum - expected_width) > width_tol:
+            logger.info("[ALIGN] Koridor genişlik testi başarısız: ölçülen %.1f cm (beklenen %.1f ±%.1f). "
+                        "Yakında sütun veya engel var, hizalama atlanıyor.", 
+                        best_sum, expected_width, width_tol)
+            return
+        
+        # We will try nudging left/right to see if the sum decreases.
+        nudge_time = 0.05  # ~4 degrees per nudge
+        
+        # Step 1: Try turning right slightly
+        logger.info("[ALIGN] Sağa ufak dönüş deneniyor...")
+        m2_motor.turn_in_place_for_time(direction=+1, duration=nudge_time)
+        time.sleep(0.2)
+        reading = m3_sensors.get_navigation_sensors_filtered(samples=4)
+        sum_right = reading.left_cm + reading.right_cm
+        logger.info("[ALIGN] Sağa dönüş sonrası toplam: %.1f cm", sum_right)
+        
+        if sum_right < best_sum - 0.2:  # Found a better angle turning right
+            best_sum = sum_right
+            while True:
+                logger.info("[ALIGN] İyileşme var, sağa ufak dönüşe devam ediliyor...")
+                m2_motor.turn_in_place_for_time(direction=+1, duration=nudge_time)
+                time.sleep(0.2)
+                reading = m3_sensors.get_navigation_sensors_filtered(samples=4)
+                sum_next = reading.left_cm + reading.right_cm
+                logger.info("[ALIGN] Sonraki toplam: %.1f cm", sum_next)
+                if sum_next < best_sum - 0.2:
+                    best_sum = sum_next
+                else:
+                    # It started increasing, so turn back left once to restore the minimum
+                    logger.info("[ALIGN] Artış başladı veya minimumda, geri sola dönülüyor.")
+                    m2_motor.turn_in_place_for_time(direction=-1, duration=nudge_time)
+                    break
+            logger.info("[ALIGN] Hizalama tamamlandı.")
+            return
+            
+        # If right didn't improve, turn back left to original position
+        logger.info("[ALIGN] Sağa dönüş iyileştirmedi. Orijinal konuma geri dönülüyor...")
+        m2_motor.turn_in_place_for_time(direction=-1, duration=nudge_time)
+        time.sleep(0.2)
+        
+        # Step 2: Try turning left slightly
+        logger.info("[ALIGN] Sola ufak dönüş deneniyor...")
+        m2_motor.turn_in_place_for_time(direction=-1, duration=nudge_time)
+        time.sleep(0.2)
+        reading = m3_sensors.get_navigation_sensors_filtered(samples=4)
+        sum_left = reading.left_cm + reading.right_cm
+        logger.info("[ALIGN] Sola dönüş sonrası toplam: %.1f cm", sum_left)
+        
+        if sum_left < best_sum - 0.2:  # Found a better angle turning left
+            best_sum = sum_left
+            while True:
+                logger.info("[ALIGN] İyileşme var, sola ufak dönüşe devam ediliyor...")
+                m2_motor.turn_in_place_for_time(direction=-1, duration=nudge_time)
+                time.sleep(0.2)
+                reading = m3_sensors.get_navigation_sensors_filtered(samples=4)
+                sum_next = reading.left_cm + reading.right_cm
+                logger.info("[ALIGN] Sonraki toplam: %.1f cm", sum_next)
+                if sum_next < best_sum - 0.2:
+                    best_sum = sum_next
+                else:
+                    # It started increasing, so turn back right once to restore the minimum
+                    logger.info("[ALIGN] Artış başladı veya minimumda, geri sağa dönülüyor.")
+                    m2_motor.turn_in_place_for_time(direction=+1, duration=nudge_time)
+                    break
+            logger.info("[ALIGN] Hizalama tamamlandı.")
+            return
+            
+        # If left didn't improve either, turn back right to original position
+        logger.info("[ALIGN] Sola dönüş de iyileştirmedi. Orijinal konuma dönülüyor.")
+        m2_motor.turn_in_place_for_time(direction=+1, duration=nudge_time)
+        time.sleep(0.2)
+        logger.info("[ALIGN] Zaten en uygun açıda. Hizalama tamamlandı.")

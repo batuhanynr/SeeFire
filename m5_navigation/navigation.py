@@ -33,7 +33,6 @@ import time
 import config
 import m2_motor
 import m3_sensors
-import m4_vision
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +161,6 @@ class NavigationController:
 
         last_ticks = m2_motor.get_encoder_ticks()
         last_ticks_time = time.time()
-        _heading_last_check = time.time()
 
         try:
             while True:
@@ -228,29 +226,6 @@ class NavigationController:
                     m2_motor.reset_encoder_window()
                     m2_motor.motor_drive("forward", config.DRIVE_SPEED)
                     is_driving = True
-
-                # 6. Görsel yön düzeltmesi (her HEADING_CHECK_INTERVAL_S saniyede bir)
-                if time.time() - _heading_last_check >= HEADING_CHECK_INTERVAL_S:
-                    _heading_last_check = time.time()
-                    correction = m4_vision.get_heading_correction()
-                    if correction is not None:
-                        logger.info(
-                            "[HEADING] Görsel drift tespiti: %s → mikro düzeltme uygulanıyor.",
-                            correction)
-                        m2_motor.stop()
-                        is_driving = False
-                        m2_motor.set_total_distance_cm(
-                            current_total + m2_motor.get_measured_distance_cm())
-                        # DRIFT_RIGHT: robota sağa kaymış, sola döndür
-                        # DRIFT_LEFT:  robota sola kaymış, sağa döndür
-                        turn_deg = (-HEADING_MICRO_TURN_DEG
-                                    if correction == "DRIFT_RIGHT"
-                                    else HEADING_MICRO_TURN_DEG)
-                        m2_motor.motor_turn(turn_deg, config.TURN_SPEED)
-                        m2_motor.reset_encoder_window()
-                        m2_motor.motor_drive("forward", config.DRIVE_SPEED)
-                        is_driving = True
-
                 time.sleep(0.05)
 
         except KeyboardInterrupt:
@@ -268,54 +243,54 @@ class NavigationController:
         m2_motor.set_total_distance_cm(current_total + final_window)
 
     # ──────────────────────────────────────────────────────────────────────
-    # 360° tarama
+    # 360° tarama (Sağ ve Sol yönleri tarar ve doğrular)
     # ──────────────────────────────────────────────────────────────────────
-
+ 
     def _scan_360(self, segment_id: int) -> None:
-        """Robot durur, 4 × (90° sağa dön + bekleme + snapshot).
-        Net dönüş = 360° → robot orijinal yönüne geri döner.
+        """Robot durur. 
+        1. Sağa 90° döner, fotoğraf çeker/arama yapar, sola 90° dönüp kuzeye bakar.
+        2. Sola 90° döner, fotoğraf çeker/arama yapar, sağa 90° dönüp kuzeye bakar.
         """
         m2_motor.stop()
-        time.sleep(0.3)
-        logger.info("[SCAN] 360° tarama başlıyor (segment %d).", segment_id)
-
-        directions = ["K", "D", "G", "B"]  # Kuzey, Doğu, Güney, Batı
-        for i, direction in enumerate(directions):
-            label = f"seg{segment_id}-{direction}"
-            logger.info("[SCAN] Yön: %s — snapshot: %s", direction, label)
-            self._snapshot_cb(label)
-            time.sleep(SCAN_WAIT_S)          # Görüntü işleme için bekle
-            m2_motor.turn_right_90()         # Bir sonraki yöne dön
-            time.sleep(0.2)                  # Dönüş sonrası stabilizasyon
-
-        logger.info("[SCAN] 360° tarama tamamlandı. Robot orijinal yönde.")
-        self._verify_heading_after_scan()
-
-    # ──────────────────────────────────────────────────────────────────────
-    # 360° tarama sonrası görsel yön doğrulama
-    # ──────────────────────────────────────────────────────────────────────
-
-    def _verify_heading_after_scan(self) -> None:
-        """360° tarama sonrası kameradan kuzeye bakılıyor mu doğrula.
-
-        4×90° pivot dönüşleri hatalı kalibrasyonla tam 360° yapmayabilir.
-        Görsel yön düzeltmesi robotu tekrar kuzeye hizalar.
-        Hizalama sağlanana veya max deneme sayısına ulaşana kadar tekrarlar.
-        """
-        for attempt in range(3):
-            correction = m4_vision.get_heading_correction()
-            if correction is None:
-                logger.info("[HEADING] Tarama sonrası yön doğrulandı. ✓")
-                return
-            logger.info(
-                "[HEADING] Tarama sonrası drift: %s → düzeltme %d/3",
-                correction, attempt + 1)
-            turn_deg = (-HEADING_MICRO_TURN_DEG
-                        if correction == "DRIFT_RIGHT"
-                        else HEADING_MICRO_TURN_DEG)
-            m2_motor.motor_turn(turn_deg, config.TURN_SPEED)
-            time.sleep(0.3)
-        logger.warning("[HEADING] Tarama sonrası yön tam hizalanamadı — sürüşe devam.")
+        logger.info("[SCAN] Tarama başlıyor (segment %d). Durma stabilizasyonu için bekleniyor...", segment_id)
+        time.sleep(1.5)
+ 
+        # 1. Sağa dön ve tara
+        logger.info("[SCAN] Sağa (DOĞU) dönülüyor...")
+        m2_motor.turn_right_90()
+        logger.info("[SCAN] Dönüş sonrası duruluyor ve bekleniyor...")
+        time.sleep(1.0)
+        
+        logger.info("[SCAN] Yön: D — snapshot alınıyor...")
+        self._snapshot_cb(f"seg{segment_id}-D")
+        time.sleep(SCAN_WAIT_S)
+        
+        logger.info("[SCAN] Sola dönmeden önce duruluyor ve bekleniyor...")
+        time.sleep(1.0)
+        logger.info("[SCAN] Sola dönüp tekrar Kuzey yönüne bakılıyor...")
+        m2_motor.turn_left_90()
+        logger.info("[SCAN] Kuzeye dönüş sonrası duruluyor ve bekleniyor...")
+        time.sleep(1.5)
+ 
+        # 2. Sola dön ve tara
+        logger.info("[SCAN] Sola (BATI) dönülüyor...")
+        m2_motor.turn_left_90()
+        logger.info("[SCAN] Dönüş sonrası duruluyor ve bekleniyor...")
+        time.sleep(1.0)
+        
+        logger.info("[SCAN] Yön: B — snapshot alınıyor...")
+        self._snapshot_cb(f"seg{segment_id}-B")
+        time.sleep(SCAN_WAIT_S)
+        
+        logger.info("[SCAN] Sağa dönmeden önce duruluyor ve bekleniyor...")
+        time.sleep(1.0)
+        logger.info("[SCAN] Sağa dönüp tekrar Kuzey yönüne bakılıyor...")
+        m2_motor.turn_right_90()
+        logger.info("[SCAN] Kuzeye dönüş sonrası duruluyor ve bekleniyor...")
+        time.sleep(1.5)
+ 
+        logger.info("[SCAN] Tarama tamamlandı.")
+        time.sleep(1.5)
 
     # ──────────────────────────────────────────────────────────────────────
     # Periyodik merkez düzeltme (sürüş içinde)
@@ -375,8 +350,4 @@ class NavigationController:
 
     @staticmethod
     def _default_snapshot(label: str) -> None:
-        logger.info("[SNAPSHOT] %s", label)
-        try:
-            m4_vision.capture_frame()
-        except Exception as exc:
-            logger.warning("[SNAPSHOT] Çerçeve alınamadı (%s): %s", label, exc)
+        logger.info("[SNAPSHOT] %s (Kameradan navigasyon için veri alma kaldırıldı)", label)
