@@ -64,7 +64,7 @@ STEP_DISTANCE_CM = 5.0
 SIDE_STEP_CM = 5.0
 
 # Obstacle thresholds (front sensor)
-OBSTACLE_THRESHOLD_CM = 20.0   # below this → obstacle, trigger avoidance
+OBSTACLE_THRESHOLD_CM = 55.0   # below this → obstacle, trigger avoidance
 
 # Side-pass dynamic clearance: clearance-side sensor must exceed D₀ + delta
 # to declare the obstacle cleared. D₀ is the front reading at detection time.
@@ -87,7 +87,7 @@ POSITION_TOLERANCE_CM = 5.0
 FINE_TUNE_STEP_CM     = 2.0
 
 # Encoder calibration (20 ticks per 20.73cm wheel revolution -> ~0.965 ticks/cm)
-ENCODER_TICKS_PER_CM = 2.2209
+ENCODER_TICKS_PER_CM = 1.6239
 # Slots on the encoder disc = ticks per full wheel revolution. Set to your
 # actual disc slot count (common slotted optical discs are 20). Used for RPM.
 ENCODER_TICKS_PER_REV = 20.0
@@ -98,21 +98,21 @@ WHEEL_DIAMETER_MM = 66.0
 
 # Drive parameters
 DRIVE_SPEED = 60   # PWM duty cycle 0-100 for forward
-TURN_SPEED  = 95   # PWM duty cycle 0-100 for turning (increased to 95 for maximum pivot torque)
+TURN_SPEED  = 60   # PWM duty cycle 0-100 for turning (reduced for slower, controlled turns)
 # Motor speed trims to correct forward drift (1.0 = no trim)
 # If the robot drifts right, decrease LEFT_MOTOR_TRIM (e.g. 0.90)
-LEFT_MOTOR_TRIM = 0.90
+LEFT_MOTOR_TRIM = 1.0
 RIGHT_MOTOR_TRIM = 1.0
 # Time-based fallback for distance/turn when no encoder is wired (mock or hardware-absent)
 MOCK_CM_PER_SEC      = 20.0  # nominal forward speed at DRIVE_SPEED duty
-MOCK_TURN_90_SECONDS = 1.3   # nominal time for 90° true pivot at TURN_SPEED (dual L298N, both sides active)
+MOCK_TURN_90_SECONDS = 1.05  # nominal time for 90° true pivot at TURN_SPEED (dual L298N, both sides active)
 
 # --- Battery Characteristics (2S Li-ion) ---
 BATTERY_MAX_V     = 8.4   # Full charge
 BATTERY_NOMINAL_V = 7.4   # Typical
 BATTERY_LOW_V     = 6.8   # Warning threshold
 BATTERY_CRIT_V    = 6.4   # Emergency stop / cutoff
-BYPASS_BATTERY_CHECK = False  # Set to True to ignore critical battery shutdown during testing
+BYPASS_BATTERY_CHECK = True   # ADC kalibre edilene kadar True — gerçek çalışmada False yapın
 BATTERY_ADC_CH    = 1     # Which MCP3208 channel
 VDIV_R1           = 20000.0 # 20k Ohm
 VDIV_R2           = 10000.0 # 10k Ohm (V_ADC = V_BAT * R2/(R1+R2))
