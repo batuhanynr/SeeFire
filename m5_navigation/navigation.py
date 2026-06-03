@@ -46,6 +46,9 @@ MAX_SEGMENTS          = 20      # Azami segment sayısı (güvenlik)
 NUDGE_CM              = 15.0    # Merkeze alırken yatay hareket mesafesi (cm)
 MAX_NUDGE_ATTEMPTS    = 4       # Tek merkez oturumunda en fazla düzeltme denemesi
 
+HEADING_CHECK_INTERVAL_S = 2.0  # Sürüş sırasında yön kontrolü periyodu (saniye)
+HEADING_MICRO_TURN_DEG   = 10   # Görsel yön düzeltmesi için mikro dönüş açısı
+
 
 class ObstacleBlockedError(RuntimeError):
     """Önde duvar/engel, aşılamadı."""
@@ -159,6 +162,7 @@ class NavigationController:
 
         last_ticks = m2_motor.get_encoder_ticks()
         last_ticks_time = time.time()
+        _heading_last_check = time.time()
 
         try:
             while True:
@@ -225,6 +229,28 @@ class NavigationController:
                     m2_motor.motor_drive("forward", config.DRIVE_SPEED)
                     is_driving = True
 
+                # 6. Görsel yön düzeltmesi (her HEADING_CHECK_INTERVAL_S saniyede bir)
+                if time.time() - _heading_last_check >= HEADING_CHECK_INTERVAL_S:
+                    _heading_last_check = time.time()
+                    correction = m4_vision.get_heading_correction()
+                    if correction is not None:
+                        logger.info(
+                            "[HEADING] Görsel drift tespiti: %s → mikro düzeltme uygulanıyor.",
+                            correction)
+                        m2_motor.stop()
+                        is_driving = False
+                        m2_motor.set_total_distance_cm(
+                            current_total + m2_motor.get_measured_distance_cm())
+                        # DRIFT_RIGHT: robota sağa kaymış, sola döndür
+                        # DRIFT_LEFT:  robota sola kaymış, sağa döndür
+                        turn_deg = (-HEADING_MICRO_TURN_DEG
+                                    if correction == "DRIFT_RIGHT"
+                                    else HEADING_MICRO_TURN_DEG)
+                        m2_motor.motor_turn(turn_deg, config.TURN_SPEED)
+                        m2_motor.reset_encoder_window()
+                        m2_motor.motor_drive("forward", config.DRIVE_SPEED)
+                        is_driving = True
+
                 time.sleep(0.05)
 
         except KeyboardInterrupt:
@@ -263,6 +289,33 @@ class NavigationController:
             time.sleep(0.2)                  # Dönüş sonrası stabilizasyon
 
         logger.info("[SCAN] 360° tarama tamamlandı. Robot orijinal yönde.")
+        self._verify_heading_after_scan()
+
+    # ──────────────────────────────────────────────────────────────────────
+    # 360° tarama sonrası görsel yön doğrulama
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _verify_heading_after_scan(self) -> None:
+        """360° tarama sonrası kameradan kuzeye bakılıyor mu doğrula.
+
+        4×90° pivot dönüşleri hatalı kalibrasyonla tam 360° yapmayabilir.
+        Görsel yön düzeltmesi robotu tekrar kuzeye hizalar.
+        Hizalama sağlanana veya max deneme sayısına ulaşana kadar tekrarlar.
+        """
+        for attempt in range(3):
+            correction = m4_vision.get_heading_correction()
+            if correction is None:
+                logger.info("[HEADING] Tarama sonrası yön doğrulandı. ✓")
+                return
+            logger.info(
+                "[HEADING] Tarama sonrası drift: %s → düzeltme %d/3",
+                correction, attempt + 1)
+            turn_deg = (-HEADING_MICRO_TURN_DEG
+                        if correction == "DRIFT_RIGHT"
+                        else HEADING_MICRO_TURN_DEG)
+            m2_motor.motor_turn(turn_deg, config.TURN_SPEED)
+            time.sleep(0.3)
+        logger.warning("[HEADING] Tarama sonrası yön tam hizalanamadı — sürüşe devam.")
 
     # ──────────────────────────────────────────────────────────────────────
     # Periyodik merkez düzeltme (sürüş içinde)
