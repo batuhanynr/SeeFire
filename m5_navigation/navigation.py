@@ -45,9 +45,6 @@ MAX_SEGMENTS          = 20      # Azami segment sayısı (güvenlik)
 NUDGE_CM              = 15.0    # Merkeze alırken yatay hareket mesafesi (cm)
 MAX_NUDGE_ATTEMPTS    = 4       # Tek merkez oturumunda en fazla düzeltme denemesi
 
-HEADING_CHECK_INTERVAL_S = 2.0  # Sürüş sırasında yön kontrolü periyodu (saniye)
-HEADING_MICRO_TURN_DEG   = 10   # Görsel yön düzeltmesi için mikro dönüş açısı
-
 
 class ObstacleBlockedError(RuntimeError):
     """Önde duvar/engel, aşılamadı."""

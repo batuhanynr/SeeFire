@@ -7,6 +7,9 @@ from .vision import (
     get_fire_confidence,
     get_smoke_confidence,
     get_fire_side,
+    trigger_fire_alarm,
+    is_alarm_confirmed,
+    clear_fire_alarm,
 )
 
 __all__ = [
@@ -18,4 +21,7 @@ __all__ = [
     "get_fire_confidence",
     "get_smoke_confidence",
     "get_fire_side",
+    "trigger_fire_alarm",
+    "is_alarm_confirmed",
+    "clear_fire_alarm",
 ]

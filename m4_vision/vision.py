@@ -67,12 +67,44 @@ if CV_AVAILABLE:
 
 
 # ---------------------------------------------------------------------------
-# MJPEG stream server (Pi → PC canlı görüntü)
-# SEEFIRE_STREAM=1  →  http://<pi-ip>:8080/  veya  /stream
+# Fire alarm notification state
+# ---------------------------------------------------------------------------
+
+_alarm_active = threading.Event()
+_alarm_confirmed = threading.Event()
+_alarm_payload: dict = {}
+
+
+def trigger_fire_alarm(data: dict) -> None:
+    """Set by M6 when fire is detected. Activates alarm page on web UI."""
+    global _alarm_payload
+    _alarm_payload = dict(data)
+    _alarm_confirmed.clear()
+    _alarm_active.set()
+    logger.error("[ALARM] Yangın alarmı tetiklendi: %s", data)
+
+
+def is_alarm_confirmed() -> bool:
+    """True after user clicks OK on the alarm web page."""
+    return _alarm_confirmed.is_set()
+
+
+def clear_fire_alarm() -> None:
+    """Reset alarm state after acknowledgment."""
+    global _alarm_payload
+    _alarm_active.clear()
+    _alarm_confirmed.clear()
+    _alarm_payload = {}
+    logger.info("[ALARM] Yangın alarmı sıfırlandı.")
+
+
+# ---------------------------------------------------------------------------
+# MJPEG stream + alarm notification server
+# Her zaman başlar (SEEFIRE_STREAM bağımsız) — port: SEEFIRE_STREAM_PORT (def 8080)
 # ---------------------------------------------------------------------------
 
 class _MjpegServer(threading.Thread):
-    """Stdlib-only MJPEG HTTP server. No Flask dependency."""
+    """Stdlib-only HTTP server: MJPEG stream + fire alarm page."""
 
     def __init__(self, get_frame_fn, port: int = 8080):
         super().__init__(daemon=True, name="mjpeg-server")
@@ -84,45 +116,114 @@ class _MjpegServer(threading.Thread):
 
         class _Handler(BaseHTTPRequestHandler):
             def do_GET(self):
-                if self.path in ("/stream", "/"):
-                    if self.path == "/":
-                        self.send_response(200)
-                        self.send_header("Content-Type", "text/html")
-                        self.end_headers()
-                        self.wfile.write(
-                            b"<html><body style='background:#000;margin:0'>"
-                            b"<img src='/stream' style='width:100%'>"
-                            b"</body></html>"
-                        )
-                        return
+                if _alarm_active.is_set():
+                    self._serve_alarm_page()
+                    return
+                if self.path == "/stream":
+                    self._serve_mjpeg(get_frame)
+                elif self.path == "/":
                     self.send_response(200)
-                    self.send_header(
-                        "Content-Type",
-                        "multipart/x-mixed-replace; boundary=frame",
-                    )
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
                     self.end_headers()
-                    while True:
-                        frame = get_frame()
-                        if frame is None:
-                            time.sleep(0.1)
-                            continue
-                        ok, buf = cv2.imencode(
-                            ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75]
-                        )
-                        if not ok:
-                            continue
-                        data = buf.tobytes()
-                        try:
-                            self.wfile.write(
-                                b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
-                                + data
-                                + b"\r\n"
-                            )
-                        except Exception:
-                            return
+                    self.wfile.write(
+                        b"<html><body style='background:#000;margin:0;color:#0f0;font-family:monospace'>"
+                        b"<img src='/stream' style='width:100%;display:block'>"
+                        b"<p style='text-align:center;padding:8px'>SeeFire - Canli Kamera</p>"
+                        b"</body></html>"
+                    )
                 else:
                     self.send_response(404)
                     self.end_headers()
+
+            def do_POST(self):
+                if self.path == "/ok":
+                    _alarm_confirmed.set()
+                    self.send_response(303)
+                    self.send_header("Location", "/")
+                    self.end_headers()
+                    logger.info("[ALARM] Kullanici alarmi onayladi (web OK butonu).")
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
+            def _serve_alarm_page(self):
+                p = _alarm_payload
+                fire_pct  = int(p.get("fire_conf",  0.0) * 100)
+                smoke_raw = p.get("smoke", 0)
+                temp_c    = p.get("temp",  0.0)
+                score     = p.get("score", 0.0)
+                ts        = p.get("time",  "—")
+                html = f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="3">
+<title>SeeFire — YANGIN ALARMI</title>
+<style>
+  body{{margin:0;background:#1a0000;color:#ff4444;font-family:monospace;
+       display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh}}
+  h1{{font-size:2.5rem;text-shadow:0 0 20px #ff0000;animation:blink 0.8s step-end infinite}}
+  @keyframes blink{{50%{{opacity:0}}}}
+  .card{{background:#2a0000;border:2px solid #ff0000;border-radius:12px;
+         padding:24px 48px;text-align:center;box-shadow:0 0 40px #ff000055}}
+  .row{{display:flex;justify-content:space-between;gap:48px;margin:12px 0;font-size:1.1rem}}
+  .label{{color:#ff8888}} .val{{color:#ffffff;font-weight:bold}}
+  .btn{{margin-top:28px;padding:16px 64px;background:#ff2222;color:#fff;border:none;
+        border-radius:8px;font-size:1.4rem;font-weight:bold;cursor:pointer;
+        box-shadow:0 0 20px #ff000099;transition:transform .1s}}
+  .btn:hover{{transform:scale(1.05)}}
+  .sub{{margin-top:12px;color:#ff6666;font-size:.9rem}}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>&#128293; YANGIN ALARMI &#128293;</h1>
+  <div class="row">
+    <div><span class="label">Yangin Guven:</span> <span class="val">{fire_pct}%</span></div>
+    <div><span class="label">Duman:</span> <span class="val">{smoke_raw}/4095</span></div>
+    <div><span class="label">Sicaklik:</span> <span class="val">{temp_c:.1f} °C</span></div>
+    <div><span class="label">Fusion Skoru:</span> <span class="val">{score:.2f}</span></div>
+  </div>
+  <p class="sub">Zaman: {ts} &nbsp;|&nbsp; Robot durdu ve geri cekildi</p>
+  <form method="POST" action="/ok">
+    <button class="btn" type="submit">&#10003; TAMAM — Alarmi Onayla ve Devam Et</button>
+  </form>
+</div>
+</body>
+</html>"""
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(html.encode("utf-8"))
+
+            def _serve_mjpeg(self, get_frame):
+                self.send_response(200)
+                self.send_header(
+                    "Content-Type",
+                    "multipart/x-mixed-replace; boundary=frame",
+                )
+                self.end_headers()
+                while True:
+                    if _alarm_active.is_set():
+                        return
+                    frame = get_frame()
+                    if frame is None:
+                        time.sleep(0.1)
+                        continue
+                    ok, buf = cv2.imencode(
+                        ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75]
+                    )
+                    if not ok:
+                        continue
+                    data = buf.tobytes()
+                    try:
+                        self.wfile.write(
+                            b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
+                            + data
+                            + b"\r\n"
+                        )
+                    except Exception:
+                        return
 
             def log_message(self, *_):
                 pass
@@ -130,7 +231,8 @@ class _MjpegServer(threading.Thread):
         socketserver.TCPServer.allow_reuse_address = True
         with socketserver.TCPServer(("", self._port), _Handler) as srv:
             logger.info(
-                "MJPEG stream başlatıldı → http://<pi-ip>:%d/", self._port
+                "Web sunucusu başlatıldı → http://<pi-ip>:%d/  (stream + alarm bildirimi)",
+                self._port,
             )
             srv.serve_forever()
 
@@ -211,8 +313,12 @@ class VisionM4:
         self._actual_h: int = config.CAMERA_TARGET_HEIGHT
 
     def init(self) -> bool:
+        port = int(os.environ.get("SEEFIRE_STREAM_PORT", "8080"))
+
         if not CV_AVAILABLE:
             logger.info("[MOCK] M4 Vision initialized.")
+            if os.environ.get("SEEFIRE_STREAM") == "1":
+                _MjpegServer(self.capture_frame, port).start()
             return True
         try:
             self._capture = cv2.VideoCapture(0)
@@ -247,14 +353,15 @@ class VisionM4:
                 YOLO_AVAILABLE,
             )
 
-            # Opsiyonel MJPEG stream: SEEFIRE_STREAM=1 ile etkinleştir
-            if os.environ.get("SEEFIRE_STREAM") == "1":
-                port = int(os.environ.get("SEEFIRE_STREAM_PORT", "8080"))
-                _MjpegServer(self.capture_frame, port).start()
-
         except Exception as exc:
             logger.error("Camera open failed: %s", exc)
             self._capture = None
+
+        # Web sunucusu: gerçek Pi'de her zaman, mock modda yalnızca SEEFIRE_STREAM=1 ile
+        if CV_AVAILABLE or os.environ.get("SEEFIRE_STREAM") == "1":
+            _MjpegServer(self.capture_frame, port).start()
+        else:
+            logger.info("[MOCK] Web sunucusu başlatılmıyor (mock mod, SEEFIRE_STREAM=0).")
         return True
 
     def _update_loop(self) -> None:

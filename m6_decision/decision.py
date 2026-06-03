@@ -8,6 +8,7 @@ import threading
 import time
 from enum import Enum, auto
 from m2_motor import motor
+import m2_motor
 from m5_navigation.navigation import NavigationController, ObstacleBlockedError
 import m7_logging
 
@@ -32,6 +33,8 @@ class DecisionEngine:
         self.state = RobotState.INIT
         self._stop_event = threading.Event()
         self.fusion_score = 0.0
+        self._alarm_setup_done = False  # ALARM state first-entry flag
+        self._alarm_last_print = 0.0   # rate-limit terminal repeats
         # Initialize NavigationController with a callback that logs to M7
         self.nav = NavigationController(snapshot_callback=self._on_snapshot)
 
@@ -161,19 +164,83 @@ class DecisionEngine:
                 self.state = RobotState.NAVIGATE
 
         elif self.state == RobotState.ALARM:
-            logger.error("[FSM] !!! FIRE ALARM ACTIVE !!! (Score: %.2f)", self.fusion_score)
-            motor.set_alarm(led=True, buzzer=True)
-            
-            # Reset only if fusion score drops significantly
-            if self.fusion_score < config.FUSION_CLEAR_THRESH:
-                logger.info("[FSM] Risk cleared (score=%.2f). Resetting alarm.", self.fusion_score)
-                motor.set_alarm(led=False, buzzer=False)
-                self.state = RobotState.NAVIGATE
+            import m4_vision
+            import m3_sensors
+
+            if not self._alarm_setup_done:
+                # --- İlk giriş: durdur, geri çekil, bildir ---
+                motor.motor_stop()
+
+                # Güvenlik amaçlı geri çekilme (~30 cm)
+                m2_motor.motor_drive("backward", config.DRIVE_SPEED)
+                time.sleep(1.5)
+                m2_motor.stop()
+
+                # Sensör verilerini al
+                try:
+                    sensors = m3_sensors.get_fusion_sensors()
+                    smoke_val = float(sensors.smoke_level)
+                    ir_temp   = float(sensors.ir_temp)
+                except Exception:
+                    smoke_val, ir_temp = 0.0, 0.0
+
+                fire_conf = m4_vision.get_fire_confidence()
+
+                alarm_data = {
+                    "fire_conf": fire_conf,
+                    "smoke":     smoke_val,
+                    "temp":      ir_temp,
+                    "score":     self.fusion_score,
+                    "time":      time.strftime("%H:%M:%S"),
+                }
+                m4_vision.trigger_fire_alarm(alarm_data)
+
+                # Terminal uyarısı
+                self._print_alarm_banner(alarm_data)
+                self._alarm_setup_done = True
+                self._alarm_last_print = time.time()
+
+            else:
+                # --- Sonraki döngüler: onayla mı kontrol et + periyodik yazdır ---
+                if m4_vision.is_alarm_confirmed():
+                    logger.info("[FSM] Kullanici alarmi onayladi. Navigasyona donuluyor.")
+                    m4_vision.clear_fire_alarm()
+                    self._alarm_setup_done = False
+                    self.state = RobotState.NAVIGATE
+                    return
+
+                # Her 5 saniyede bir terminale tekrar yaz
+                if time.time() - self._alarm_last_print >= 5.0:
+                    fire_conf = m4_vision.get_fire_confidence()
+                    print(f"\r[ALARM] Bekleniyor... fire={fire_conf:.2f}  score={self.fusion_score:.2f}"
+                          f"  → http://localhost:8080/alarm   (OK butonu bekleniyor)", flush=True)
+                    self._alarm_last_print = time.time()
 
         elif self.state == RobotState.STOP:
             logger.info("[FSM] Shutdown.")
             motor.motor_stop()
             self._stop_event.set()
+
+
+    @staticmethod
+    def _print_alarm_banner(data: dict) -> None:
+        fire_pct  = int(data.get("fire_conf", 0.0) * 100)
+        smoke_raw = data.get("smoke", 0)
+        temp_c    = data.get("temp", 0.0)
+        score     = data.get("score", 0.0)
+        ts        = data.get("time", "—")
+        print("\n" + "=" * 64)
+        print("  !!! YANGIN ALARMI !!!   FIRE DETECTED")
+        print("=" * 64)
+        print(f"  Zaman        : {ts}")
+        print(f"  Yangin Guven : {fire_pct}%")
+        print(f"  Duman (ADC)  : {smoke_raw:.0f} / 4095")
+        print(f"  Sicaklik     : {temp_c:.1f} C")
+        print(f"  Fusion Skoru : {score:.2f}")
+        print("-" * 64)
+        print("  Robot DURDU ve 30 cm geri cekildi.")
+        print("  Tarayicidan ONAYLAYIN: http://<pi-ip>:8080/alarm")
+        print("=" * 64 + "\n", flush=True)
 
 
 def check_battery_health() -> bool:
