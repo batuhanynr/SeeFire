@@ -27,6 +27,14 @@ import config
 
 logger = logging.getLogger(__name__)
 
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, str(default)))
+    except ValueError:
+        logger.warning("Invalid %s=%r; using %.2f", name, os.environ.get(name), default)
+        return default
+
 # ---------------------------------------------------------------------------
 # Optional heavy dependencies
 # ---------------------------------------------------------------------------
@@ -78,9 +86,13 @@ class _MjpegServer(threading.Thread):
         super().__init__(daemon=True, name="mjpeg-server")
         self._get_frame = get_frame_fn
         self._port = port
+        self._fps = max(1.0, _env_float("SEEFIRE_STREAM_FPS", 20.0))
+        self._quality = int(max(30, min(95, _env_float("SEEFIRE_STREAM_JPEG_QUALITY", 70.0))))
 
     def run(self):
         get_frame = self._get_frame
+        frame_interval = 1.0 / self._fps
+        jpeg_quality = self._quality
 
         class _Handler(BaseHTTPRequestHandler):
             def do_GET(self):
@@ -100,26 +112,34 @@ class _MjpegServer(threading.Thread):
                         "Content-Type",
                         "multipart/x-mixed-replace; boundary=frame",
                     )
+                    self.send_header("Cache-Control", "no-store")
                     self.end_headers()
                     while True:
+                        loop_start = time.monotonic()
                         frame = get_frame()
                         if frame is None:
                             time.sleep(0.1)
                             continue
                         ok, buf = cv2.imencode(
-                            ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75]
+                            ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, jpeg_quality]
                         )
                         if not ok:
                             continue
                         data = buf.tobytes()
                         try:
                             self.wfile.write(
-                                b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
+                                b"--frame\r\n"
+                                b"Content-Type: image/jpeg\r\n"
+                                + f"Content-Length: {len(data)}\r\n\r\n".encode("ascii")
                                 + data
                                 + b"\r\n"
                             )
+                            self.wfile.flush()
                         except Exception:
                             return
+                        elapsed = time.monotonic() - loop_start
+                        if elapsed < frame_interval:
+                            time.sleep(frame_interval - elapsed)
                 else:
                     self.send_response(404)
                     self.end_headers()
@@ -128,9 +148,16 @@ class _MjpegServer(threading.Thread):
                 pass
 
         socketserver.TCPServer.allow_reuse_address = True
-        with socketserver.TCPServer(("", self._port), _Handler) as srv:
+        class _ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+            allow_reuse_address = True
+            daemon_threads = True
+
+        with _ThreadingTCPServer(("", self._port), _Handler) as srv:
             logger.info(
-                "MJPEG stream başlatıldı → http://<pi-ip>:%d/", self._port
+                "MJPEG stream başlatıldı → http://<pi-ip>:%d/ (%.1f FPS, JPEG q=%d)",
+                self._port,
+                self._fps,
+                self._quality,
             )
             srv.serve_forever()
 
@@ -206,7 +233,9 @@ class VisionM4:
         self._current_frame = None
         self._yolo_result = {"fire_conf": 0.0, "smoke_conf": 0.0, "fire_side": None}
         self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._thread: Optional[threading.Thread] = None  # backward-compatible alias
+        self._capture_thread: Optional[threading.Thread] = None
+        self._yolo_thread: Optional[threading.Thread] = None
         self._actual_w: int = config.CAMERA_TARGET_WIDTH
         self._actual_h: int = config.CAMERA_TARGET_HEIGHT
 
@@ -237,8 +266,23 @@ class VisionM4:
                 self._capture.read()
 
             self._running = True
-            self._thread = threading.Thread(target=self._update_loop, daemon=True)
-            self._thread.start()
+            self._capture_thread = threading.Thread(
+                target=self._capture_loop,
+                daemon=True,
+                name="vision-capture",
+            )
+            self._capture_thread.start()
+            self._thread = self._capture_thread
+
+            if YOLO_AVAILABLE:
+                self._yolo_thread = threading.Thread(
+                    target=self._yolo_loop,
+                    daemon=True,
+                    name="vision-yolo",
+                )
+                self._yolo_thread.start()
+            else:
+                logger.info("M4 YOLO loop disabled; fire/smoke confidence remains 0.0.")
 
             logger.info(
                 "M4 Vision started (driver=%dx%d, target=%dx%d, YOLO=%s)",
@@ -257,11 +301,15 @@ class VisionM4:
             self._capture = None
         return True
 
-    def _update_loop(self) -> None:
-        """Background thread: capture → resize → YOLO → store result."""
+    def _capture_loop(self) -> None:
+        """Read camera frames at stream-friendly FPS without blocking on YOLO."""
         tw = config.CAMERA_TARGET_WIDTH
         th = config.CAMERA_TARGET_HEIGHT
+        capture_fps = max(1.0, _env_float("SEEFIRE_CAPTURE_FPS", _env_float("SEEFIRE_VISION_FPS", 20.0)))
+        frame_interval = 1.0 / capture_fps
+        logger.info("M4 capture loop running at %.1f FPS target", capture_fps)
         while self._running:
+            loop_start = time.monotonic()
             if self._capture is None:
                 time.sleep(0.5)
                 continue
@@ -275,13 +323,38 @@ class VisionM4:
             if raw.shape[1] != tw or raw.shape[0] != th:
                 raw = _letterbox_crop(raw, tw, th)
 
-            fire_conf, smoke_conf, fire_side = _run_yolo(raw)
-
             with self._lock:
                 self._current_frame = raw
-                self._yolo_result = {"fire_conf": fire_conf, "smoke_conf": smoke_conf, "fire_side": fire_side}
 
-            time.sleep(0.2)  # ~5 FPS — avoids overheating Pi
+            elapsed = time.monotonic() - loop_start
+            if elapsed < frame_interval:
+                time.sleep(frame_interval - elapsed)
+
+    def _yolo_loop(self) -> None:
+        """Run fire/smoke YOLO on the latest frame at a lower independent FPS."""
+        yolo_fps = max(0.2, _env_float("SEEFIRE_YOLO_FPS", 5.0))
+        frame_interval = 1.0 / yolo_fps
+        logger.info("M4 YOLO loop running at %.1f FPS target", yolo_fps)
+        while self._running:
+            loop_start = time.monotonic()
+            with self._lock:
+                frame = self._current_frame.copy() if self._current_frame is not None else None
+
+            if frame is None:
+                time.sleep(0.1)
+                continue
+
+            fire_conf, smoke_conf, fire_side = _run_yolo(frame)
+            with self._lock:
+                self._yolo_result = {
+                    "fire_conf": fire_conf,
+                    "smoke_conf": smoke_conf,
+                    "fire_side": fire_side,
+                }
+
+            elapsed = time.monotonic() - loop_start
+            if elapsed < frame_interval:
+                time.sleep(frame_interval - elapsed)
 
     def capture_frame(self) -> "Optional[np.ndarray]":
         """Return a copy of the latest frame (thread-safe). None in mock mode."""
@@ -438,8 +511,13 @@ class VisionM4:
 
     def close(self) -> None:
         self._running = False
-        if self._thread is not None:
-            self._thread.join(timeout=1.0)
+        if self._capture_thread is not None:
+            self._capture_thread.join(timeout=1.0)
+            self._capture_thread = None
+            self._thread = None
+        if self._yolo_thread is not None:
+            self._yolo_thread.join(timeout=1.0)
+            self._yolo_thread = None
         if CV_AVAILABLE and self._capture is not None:
             self._capture.release()
             self._capture = None

@@ -67,6 +67,8 @@ class DriveHardware:
         self.pwm_b = None
         self.left_ticks = 0
         self.right_ticks = 0
+        self.encoder_ok = False
+        self.encoder_error = ""
 
     def _on_left_tick(self, _channel) -> None:
         self.left_ticks += 1
@@ -95,18 +97,24 @@ class DriveHardware:
 
         gpio.setup(config.ENCODER_LEFT_PIN, gpio.IN, pull_up_down=gpio.PUD_DOWN)
         gpio.setup(config.ENCODER_RIGHT_PIN, gpio.IN, pull_up_down=gpio.PUD_DOWN)
-        gpio.add_event_detect(
-            config.ENCODER_LEFT_PIN,
-            gpio.RISING,
-            callback=self._on_left_tick,
-            bouncetime=2,
-        )
-        gpio.add_event_detect(
-            config.ENCODER_RIGHT_PIN,
-            gpio.RISING,
-            callback=self._on_right_tick,
-            bouncetime=2,
-        )
+        try:
+            gpio.add_event_detect(
+                config.ENCODER_LEFT_PIN,
+                gpio.RISING,
+                callback=self._on_left_tick,
+                bouncetime=2,
+            )
+            gpio.add_event_detect(
+                config.ENCODER_RIGHT_PIN,
+                gpio.RISING,
+                callback=self._on_right_tick,
+                bouncetime=2,
+            )
+            self.encoder_ok = True
+            self.encoder_error = ""
+        except RuntimeError as exc:
+            self.encoder_ok = False
+            self.encoder_error = str(exc)
 
     def set_drive(self, left: float, right: float) -> None:
         left = max(-100.0, min(100.0, left))
@@ -655,8 +663,12 @@ def curses_main(stdscr, fwd_level: int, turn_level: int) -> int:
             SensorStatus(
                 "drive",
                 "Motor + Enkoder",
-                True,
-                f"L298N ×2 + enc GPIO{config.ENCODER_LEFT_PIN}/{config.ENCODER_RIGHT_PIN}",
+                hw.encoder_ok,
+                (
+                    f"L298N ×2 + enc GPIO{config.ENCODER_LEFT_PIN}/{config.ENCODER_RIGHT_PIN}"
+                    if hw.encoder_ok
+                    else f"Motor OK, enkoder pasif: {hw.encoder_error}"
+                ),
             ),
         )
 

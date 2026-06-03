@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SeeFire — Kontrol Paneli</title>
+    <meta name="description" content="SeeFire yangın tespit robotu canlı izleme paneli">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <!-- ═══════════ HEADER ═══════════ -->
+    <header id="dashboard-header">
+        <div class="header-left">
+            <div class="logo">
+                <span class="logo-icon">🔥</span>
+                <div class="logo-text">
+                    <h1>SeeFire</h1>
+                    <span class="subtitle">Kontrol Paneli</span>
+                </div>
+            </div>
+        </div>
+        <div class="header-right">
+            <div id="robot-badge" class="status-badge badge-offline" title="main.py durumu">
+                <span class="status-dot"></span>
+                <span class="status-text">Robot</span>
+            </div>
+            <div id="connection-badge" class="status-badge badge-offline" title="Veritabanı bağlantısı">
+                <span class="status-dot"></span>
+                <span class="status-text">DB</span>
+            </div>
+            <div id="clock" class="clock">--:--:--</div>
+        </div>
+    </header>
+
+    <!-- ═══════════ MAIN ═══════════ -->
+    <main id="dashboard-main">
+
+        <!-- ── Top Row: Camera + Right Panel ── -->
+        <div class="grid-top">
+
+            <!-- Camera Feed -->
+            <section class="card card-camera" id="camera-section">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span class="card-icon">📹</span>
+                        <h2>Kamera</h2>
+                    </div>
+                    <span class="badge badge-sm" id="camera-status">Bekleniyor</span>
+                </div>
+                <div class="camera-container" id="camera-container">
+                    <img id="camera-feed" alt="Kamera görüntüsü">
+                    <div id="camera-placeholder" class="camera-placeholder">
+                        <div class="placeholder-icon">📷</div>
+                        <p class="placeholder-title">Kamera akışı bekleniyor</p>
+                        <p class="placeholder-hint">Robot tarafında başlatın:<br>
+                            <code>SEEFIRE_STREAM=1 python3 main.py</code>
+                        </p>
+                    </div>
+                    <!-- Vision detection overlay -->
+                    <div id="vision-overlay" class="vision-overlay hidden">
+                        <div class="vision-badge fire-badge">
+                            <span>🔥</span>
+                            <span id="fire-conf-overlay">0%</span>
+                        </div>
+                        <div class="vision-badge side-badge">
+                            <span id="fire-side-overlay"></span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Panel -->
+            <div class="right-panel">
+
+                <!-- FSM State -->
+                <section class="card card-state" id="state-card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-icon">🤖</span>
+                            <h2>Robot Durumu</h2>
+                        </div>
+                    </div>
+                    <div class="state-display">
+                        <div id="fsm-state" class="fsm-state state-offline">
+                            <span class="state-dot"></span>
+                            <span class="state-name">OFFLINE</span>
+                        </div>
+                        <div id="fsm-desc" class="fsm-desc">Bağlantı bekleniyor…</div>
+                    </div>
+                </section>
+
+                <!-- Fusion Score -->
+                <section class="card card-fusion">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-icon">⚡</span>
+                            <h2>Füzyon Skoru</h2>
+                        </div>
+                        <span id="fusion-value" class="fusion-value mono">0.00</span>
+                    </div>
+                    <div class="fusion-bar-wrap">
+                        <div class="fusion-bar">
+                            <div id="fusion-fill" class="fusion-fill" style="width:0%"></div>
+                            <div class="fusion-threshold" id="fusion-thresh-marker"></div>
+                        </div>
+                        <div class="fusion-labels">
+                            <span>0.0</span>
+                            <span class="thresh-label">Alarm: <span id="thresh-val">0.60</span></span>
+                            <span>1.0</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Sensor Cards Grid -->
+                <div class="sensor-grid">
+                    <div class="card card-sensor" id="card-temp">
+                        <div class="sensor-icon-wrap"><span class="sensor-icon">🌡️</span></div>
+                        <div class="sensor-body">
+                            <span class="sensor-label">Sıcaklık</span>
+                            <div class="sensor-val-row">
+                                <span id="val-temp" class="sensor-value mono">--</span>
+                                <span class="sensor-unit">°C</span>
+                            </div>
+                        </div>
+                        <div class="mini-bar"><div id="bar-temp" class="mini-bar-fill"></div></div>
+                    </div>
+
+                    <div class="card card-sensor" id="card-smoke">
+                        <div class="sensor-icon-wrap"><span class="sensor-icon">💨</span></div>
+                        <div class="sensor-body">
+                            <span class="sensor-label">Duman (MQ-2)</span>
+                            <div class="sensor-val-row">
+                                <span id="val-smoke" class="sensor-value mono">--</span>
+                                <span class="sensor-unit">/ 4095</span>
+                            </div>
+                        </div>
+                        <div class="mini-bar"><div id="bar-smoke" class="mini-bar-fill"></div></div>
+                    </div>
+
+                    <div class="card card-sensor" id="card-fire">
+                        <div class="sensor-icon-wrap"><span class="sensor-icon">🔥</span></div>
+                        <div class="sensor-body">
+                            <span class="sensor-label">Ateş (YOLO)</span>
+                            <div class="sensor-val-row">
+                                <span id="val-fire" class="sensor-value mono">--</span>
+                                <span class="sensor-unit">%</span>
+                            </div>
+                        </div>
+                        <div class="mini-bar"><div id="bar-fire" class="mini-bar-fill fire-fill"></div></div>
+                    </div>
+
+                    <div class="card card-sensor" id="card-distance">
+                        <div class="sensor-icon-wrap"><span class="sensor-icon">📏</span></div>
+                        <div class="sensor-body">
+                            <span class="sensor-label">Toplam Mesafe</span>
+                            <div class="sensor-val-row">
+                                <span id="val-distance" class="sensor-value mono">--</span>
+                                <span class="sensor-unit">cm</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Event Log ── -->
+        <section class="card card-events">
+            <div class="card-header">
+                <div class="card-title">
+                    <span class="card-icon">📋</span>
+                    <h2>Olay Günlüğü</h2>
+                </div>
+                <span id="event-count" class="badge badge-sm">0 olay</span>
+            </div>
+            <div class="events-scroll" id="events-scroll">
+                <table class="events-table" id="events-table">
+                    <thead>
+                        <tr>
+                            <th class="col-time">Zaman</th>
+                            <th class="col-event">Olay</th>
+                            <th class="col-num">Füzyon</th>
+                            <th class="col-num">Duman</th>
+                            <th class="col-num">Sıcaklık</th>
+                            <th class="col-num">Ateş%</th>
+                        </tr>
+                    </thead>
+                    <tbody id="events-body">
+                        <tr class="empty-row">
+                            <td colspan="6">Henüz olay kaydedilmedi</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- ── Snapshot Gallery ── -->
+        <section class="card card-snapshots" id="snapshots-section">
+            <div class="card-header">
+                <div class="card-title">
+                    <span class="card-icon">🖼️</span>
+                    <h2>Snapshot Galerisi</h2>
+                </div>
+                <div class="snapshot-actions">
+                    <span id="snapshot-count" class="badge badge-sm">0 görüntü</span>
+                    <button id="clear-snapshots" class="danger-button" type="button">Görüntüleri Temizle</button>
+                </div>
+            </div>
+            <div id="snapshot-grid" class="snapshot-grid">
+                <div class="snapshot-empty">Henüz snapshot yok</div>
+            </div>
+        </section>
+
+        <!-- ── Config / Thresholds ── -->
+        <section class="card card-config" id="config-section">
+            <div class="card-header">
+                <div class="card-title">
+                    <span class="card-icon">⚙️</span>
+                    <h2>Eşik Değerleri &amp; Konfigürasyon</h2>
+                </div>
+            </div>
+            <div id="config-grid" class="config-grid">
+                <!-- Populated by app.js -->
+                <div class="config-loading">Yükleniyor…</div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ═══════════ FOOTER ═══════════ -->
+    <footer id="dashboard-footer">
+        <span>SeeFire © 2026 — CSE 396</span>
+        <span id="last-update-footer">Son güncelleme: --</span>
+    </footer>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

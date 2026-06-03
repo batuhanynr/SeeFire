@@ -1,29 +1,55 @@
 #!/usr/bin/env python3
+import argparse
 import os
 import pty
 import sys
-import time
 
 def main():
+    parser = argparse.ArgumentParser(description="Deploy SeeFire repo to Raspberry Pi")
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Delete remote files that no longer exist locally, while preserving excluded runtime/model data.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what rsync would change without copying/deleting files.",
+    )
+    args = parser.parse_args()
+
     cmd = [
         "rsync",
         "-avz",
+        "--itemize-changes",
         "--exclude", ".venv",
         "--exclude", ".git",
         "--exclude", ".pytest_cache",
         "--exclude", "__pycache__",
         "--exclude", "*.pyc",
         "--exclude", ".claude",
+        "--exclude", ".env",
         "--exclude", "datasets/",
         "--exclude", "runs/",
-        "--exclude", "yolov8n.pt",
+        "--exclude", "runtime_data/",
+        "--exclude", "m4_vision/models/",
+        "--exclude", "*.pt",
         "--exclude", "*.zip",
         "-e", "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null",
         "./",
         "raspberry@192.168.138.141:~/SeeFire/"
     ]
+
+    if args.clean:
+        cmd.insert(2, "--delete")
+    if args.dry_run:
+        cmd.insert(2, "--dry-run")
     
     print(f"[Deploy] Spawning: {' '.join(cmd)}")
+    if args.clean:
+        print("[Deploy] Clean mode: remote stale files will be deleted except excluded runtime/model data.")
+    if args.dry_run:
+        print("[Deploy] Dry run: no remote files will be changed.")
     
     pid, fd = pty.fork()
     if pid == 0:
