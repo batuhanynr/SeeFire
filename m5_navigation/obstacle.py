@@ -30,6 +30,7 @@ Snapshot-callback fires inside both side-pass and forward-pass loops so
 sector-midpoint scans are never skipped during a detour.
 """
 import logging
+import time
 import config
 import m2_motor
 import m3_sensors
@@ -89,11 +90,17 @@ class ObstacleAvoidance:
         side-pass hit a perpendicular wall (in which case the robot is already
         retreated to the original detection point, facing north).
         """
+        logger.info("[BYPASS] Engelden kaçış başlıyor. Referans mesafe (D0): %.1f cm", reference_distance)
+        time.sleep(1.0)
+
         # Step 1: turn toward chosen side.
         if direction == "RIGHT":
+            logger.info("[BYPASS] Engelden kaçmak için SAĞA dönülüyor...")
             m2_motor.turn_right_90()
         else:
+            logger.info("[BYPASS] Engelden kaçmak için SOLA dönülüyor...")
             m2_motor.turn_left_90()
+        time.sleep(1.0)
 
         # Step 2: side-pass laterally.
         side_distance, wall_hit = self._side_pass(
@@ -106,9 +113,12 @@ class ObstacleAvoidance:
 
         # Step 3: turn back to north.
         if direction == "RIGHT":
+            logger.info("[BYPASS] Rota doğrultusuna (KUZEYE) geri dönmek için SOLA dönülüyor...")
             m2_motor.turn_left_90()
         else:
+            logger.info("[BYPASS] Rota doğrultusuna (KUZEYE) geri dönmek için SAĞA dönülüyor...")
             m2_motor.turn_right_90()
+        time.sleep(1.0)
 
         # Step 4: forward-pass north until obstacle is behind us.
         forward_distance = self._forward_pass_obstacle(
@@ -136,14 +146,28 @@ class ObstacleAvoidance:
 
     def _return_to_route(self, direction: str, side_distance: float) -> None:
         """After forward-pass: face the side axis, drive back, face north."""
+        logger.info("[BYPASS-GERİ] Rota çizgisine geri dönme manevrası başlıyor...")
+        time.sleep(1.0)
         if direction == "RIGHT":
+            logger.info("[BYPASS-GERİ] Rota çizgisine hizalanmak için SOLA dönülüyor...")
             m2_motor.turn_left_90()                       # N → W
+            time.sleep(1.0)
+            logger.info("[BYPASS-GERİ] %.1f cm yanal geri sürülüyor...", side_distance)
             self._drive_lateral(side_distance)
+            time.sleep(1.0)
+            logger.info("[BYPASS-GERİ] Rota doğrultusuna (KUZEYE) dönmek için SAĞA dönülüyor...")
             m2_motor.turn_right_90()                      # W → N
         else:
+            logger.info("[BYPASS-GERİ] Rota çizgisine hizalanmak için SAĞA dönülüyor...")
             m2_motor.turn_right_90()                      # N → E
+            time.sleep(1.0)
+            logger.info("[BYPASS-GERİ] %.1f cm yanal geri sürülüyor...", side_distance)
             self._drive_lateral(side_distance)
+            time.sleep(1.0)
+            logger.info("[BYPASS-GERİ] Rota doğrultusuna (KUZEYE) dönmek için SOLA dönülüyor...")
             m2_motor.turn_left_90()                       # E → N
+        time.sleep(1.0)
+        logger.info("[BYPASS-GERİ] Rota çizgisine geri dönüldü.")
 
     @staticmethod
     def _drive_lateral(cm: float) -> None:
@@ -180,33 +204,44 @@ class ObstacleAvoidance:
         clear_threshold = reference_distance + config.OBSTACLE_CLEARANCE_DELTA_CM
         traveled = 0.0
 
+        logger.info("[BYPASS-YAN] Yanal geçiş başladı. '%s' sensörü izleniyor. Hedef açıklık: > %.1f cm", clearance_attr, clear_threshold)
+        time.sleep(1.0)
+
         while True:
             reading = m3_sensors.get_navigation_sensors_filtered(samples=2)
             clearance = getattr(reading, clearance_attr)
             wall = reading.front_cm
 
+            logger.info("[BYPASS-YAN] Ölçüm: Yan Engel (%s) = %.1f cm | Ön (Duvar): %.1f cm | Yanal Yol: %.1f cm",
+                        clearance_attr, clearance, wall, traveled)
+
             if clearance > clear_threshold:
                 logger.info(
-                    "[OBSTACLE] Side-pass cleared after %.1f cm "
-                    "(%s=%.1f > %.1f).",
-                    traveled, clearance_attr, clearance, clear_threshold,
+                    "[BYPASS-YAN] Engel geçildi (Açıklık: %.1f cm > Eşik: %.1f cm). Ekstra güvenlik adımı atılıyor...",
+                    clearance, clear_threshold,
                 )
+                time.sleep(1.0)
+                self._drive_lateral(config.SIDE_STEP_CM)
+                traveled += config.SIDE_STEP_CM
+                time.sleep(1.0)
                 return traveled, False
 
             if 0 < wall < config.WALL_CLEARANCE_CM:
                 logger.warning(
-                    "[OBSTACLE] Wall ahead at %.1f cm after %.1f cm side-pass.",
-                    wall, traveled,
+                    "[BYPASS-YAN] HATA: Önümüzde duvar var! Mesafe: %.1f cm. Manevra durduruluyor.",
+                    wall,
                 )
+                time.sleep(1.0)
                 return traveled, True
 
             self._midpoint_callback(sector_id)
             self._drive_lateral(config.SIDE_STEP_CM)
             traveled += config.SIDE_STEP_CM
+            time.sleep(0.5)  # adımlar arası yavaşlama
 
             if traveled > config.SIDE_PASS_SAFETY_CAP_CM:
                 logger.warning(
-                    "[OBSTACLE] Side-pass exceeded %.0f cm — aborting.",
+                    "[BYPASS-YAN] Güvenlik sınırı aşıldı (%.0f cm).",
                     config.SIDE_PASS_SAFETY_CAP_CM,
                 )
                 return traveled, False
@@ -231,38 +266,52 @@ class ObstacleAvoidance:
         traveled = 0.0
         acquired = False
 
+        logger.info("[BYPASS-İLERİ] Düz ilerleme başladı. '%s' yan sensörü izleniyor. Hedef açıklık: > %.1f cm", side_attr, threshold)
+        time.sleep(1.0)
+
         while True:
             reading = m3_sensors.get_navigation_sensors_filtered(samples=2)
             side = getattr(reading, side_attr)
 
+            logger.info("[BYPASS-İLERİ] Ölçüm: Yan Engel (%s) = %.1f cm | Ön (Duvar): %.1f cm | İlerleme: %.1f cm | Algılandı: %s",
+                        side_attr, side, reading.front_cm, traveled, acquired)
+
             if not acquired and side < threshold:
                 acquired = True
                 logger.info(
-                    "[OBSTACLE] Forward-pass acquired obstacle at %.1f cm "
-                    "(%s=%.1f).", traveled, side_attr, side,
+                    "[BYPASS-İLERİ] Engel yanımızda tespit edildi. Konum alındı."
                 )
             elif acquired and side > threshold:
                 logger.info(
-                    "[OBSTACLE] Forward-pass released after %.1f cm "
-                    "(%s=%.1f > %.1f).",
-                    traveled, side_attr, side, threshold,
+                    "[BYPASS-İLERİ] Engel geride kaldı (Açıklık: %.1f cm > Eşik: %.1f cm). Ekstra güvenlik adımları atılıyor...",
+                    side, threshold,
                 )
+                time.sleep(1.0)
+                extra_steps = 3
+                for step_idx in range(extra_steps):
+                    logger.info("[BYPASS-İLERİ] Ekstra güvenlik adımı %d/%d...", step_idx + 1, extra_steps)
+                    m2_motor.drive_distance_cm(config.STEP_DISTANCE_CM)
+                    traveled += config.STEP_DISTANCE_CM
+                    time.sleep(0.5)
+                time.sleep(1.0)
                 return traveled
 
             if 0 < reading.front_cm < config.WALL_CLEARANCE_CM:
                 logger.warning(
-                    "[OBSTACLE] North wall reached during forward-pass at "
-                    "%.1f cm — stopping.", traveled,
+                    "[BYPASS-İLERİ] Önümüzde duvar var! Mesafe: %.1f cm. Sürüş durduruluyor.",
+                    reading.front_cm,
                 )
+                time.sleep(1.0)
                 return traveled
 
             self._midpoint_callback(sector_id)
             m2_motor.drive_distance_cm(config.STEP_DISTANCE_CM)
             traveled += config.STEP_DISTANCE_CM
+            time.sleep(0.5)  # adımlar arası yavaşlama
 
             if traveled > config.FORWARD_PASS_SAFETY_CAP_CM:
                 logger.warning(
-                    "[OBSTACLE] Forward-pass exceeded %.0f cm — aborting.",
+                    "[BYPASS-İLERİ] İlerleme güvenlik sınırı aşıldı (%.0f cm).",
                     config.FORWARD_PASS_SAFETY_CAP_CM,
                 )
                 return traveled

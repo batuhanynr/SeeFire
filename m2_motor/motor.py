@@ -83,9 +83,9 @@ class MotorM2:
         GPIO.setup(config.ENCODER_RIGHT_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
         try:
             GPIO.add_event_detect(config.ENCODER_LEFT_PIN, GPIO.RISING,
-                                  callback=self._on_left_tick)
+                                  callback=self._on_left_tick, bouncetime=2)
             GPIO.add_event_detect(config.ENCODER_RIGHT_PIN, GPIO.RISING,
-                                  callback=self._on_right_tick)
+                                  callback=self._on_right_tick, bouncetime=2)
         except RuntimeError as e:
             logger.warning("Encoder interrupt setup failed: %s", e)
 
@@ -175,7 +175,7 @@ class MotorM2:
         if not self._initialized:
             return
 
-        # True pivot: left forward + right backward (or vice versa)
+        # True pivot: left forward + right backward
         if angle > 0:   # Turn Right
             self._set_left_motor(speed)
             self._set_right_motor(-speed)

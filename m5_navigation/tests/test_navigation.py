@@ -132,8 +132,8 @@ def test_side_pass_clears_at_dynamic_threshold():
             sector_id=1, direction="RIGHT", reference_distance=15.0
         )
         assert wall_hit is False
-        assert traveled == config.SIDE_STEP_CM   # one step taken before clear
-
+        assert traveled == config.SIDE_STEP_CM * 2   # one step taken before clear, plus one extra safety step
+ 
 
 def test_forward_pass_clears_when_side_sensor_passes_obstacle():
     """After turning back north, the side sensor pointing at the obstacle
@@ -151,8 +151,8 @@ def test_forward_pass_clears_when_side_sensor_passes_obstacle():
         forward = oa._forward_pass_obstacle(
             sector_id=1, direction="RIGHT", reference_distance=15.0
         )
-        # One step taken before the second reading cleared.
-        assert forward == config.STEP_DISTANCE_CM
+        # One step taken before the second reading cleared, plus three extra safety steps
+        assert forward == config.STEP_DISTANCE_CM * 4
 
 
 def test_verify_and_correct_skips_when_corridor_width_mismatches():
@@ -219,13 +219,13 @@ def test_four_direction_scan_captures_each_heading():
         nc = NavigationController(snapshot_callback=lambda lbl: captured.append(lbl))
         nc._scan_360(segment_id=1)
 
-        assert captured == [
-            "seg1-K",
-            "seg1-D",
-            "seg1-G",
-            "seg1-B",
-        ]
-        assert mock_turn.call_count == 4   # 4×90° = tam tur
+    assert captured == [
+        "seg1-K",
+        "seg1-D",
+        "seg1-G",
+        "seg1-B",
+    ]
+    assert mock_turn.call_count == 4   # 4×90° = tam tur
 
 
 def test_side_pass_detects_wall_via_front_sensor():
@@ -263,7 +263,7 @@ def test_drive_segment_stops_at_target():
     mock_sensor_reading.right_cm = 200.0
 
     # Encoder: önce 0, sonra SEGMENT_CM'e ulaş
-    measured_distances = [0.0, SEGMENT_CM]
+    measured_distances = [0.0, SEGMENT_CM, SEGMENT_CM]
 
     with patch('m3_sensors.get_navigation_sensors_filtered',
                return_value=mock_sensor_reading), \

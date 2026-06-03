@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 # ── Navigasyon sabitleri ────────────────────────────────────────────────────
 SEGMENT_CM            = 500.0   # 5 metre segment uzunluğu
-SCAN_WAIT_S           = 1.0     # 360° taramada her yön sonrası bekleme (s)
+SCAN_WAIT_S           = 3.0     # 360° taramada her yön sonrası bekleme (s)
 CENTER_TOLERANCE_CM   = 25.0    # Sol-sağ fark toleransı (cm) — bu altı "merkez"
 CENTERING_INTERVAL_CM = 150.0   # Kaç cm'de bir merkez kontrolü yapılır
 MAX_SEGMENTS          = 20      # Azami segment sayısı (güvenlik)
@@ -66,28 +66,37 @@ class NavigationController:
     # ──────────────────────────────────────────────────────────────────────
 
     def start(self) -> None:
-        """Başlangıç merkez kontrolü. Merkezde değilse düzelt."""
-        logger.info("[NAV] Başlangıç merkez kontrolü başlıyor...")
-        self._initial_center_check()
-        logger.info("[NAV] Merkez kontrolü tamam. Navigasyon başlıyor.")
+        """Başlangıç merkez kontrolü (Bypass edildi)."""
+        logger.info("[NAV] Başlangıç merkez kontrolü bypass edildi. Navigasyon doğrudan başlıyor.")
 
     def run(self, waypoints=None) -> None:
-        """Ana navigasyon döngüsü. waypoints parametresi artık kullanılmaz
-        (geriye dönük uyumluluk için bırakıldı)."""
+        """Ana navigasyon döngüsü (20 metreye ulaşana kadar 5'er metrelik segmentler halinde sürer ve tarar)."""
         self.start()
 
-        segment_number = 0
-        while segment_number < MAX_SEGMENTS:
-            segment_number += 1
-            logger.info("[NAV] === SEGMENT %d başlıyor (%.0f cm) ===",
-                        segment_number, SEGMENT_CM)
+        total_target_distance = 2000.0  # 20 meters (2000 cm)
+        segment_number = 1
+        max_segments = 4  # 4 segments of 5m = 20m
+        
+        # Reset or get initial odometer reading
+        start_odo = m2_motor.get_total_distance_cm()
+        
+        while segment_number <= max_segments:
+            current_odo = m2_motor.get_total_distance_cm()
+            traveled_total = current_odo - start_odo
+            
+            logger.info("[NAV] === SEGMENT %d/%d başlıyor (Şu ana kadar kat edilen: %.1f cm, Toplam Hedef: %.0f cm) ===",
+                        segment_number, max_segments, traveled_total, total_target_distance)
+            
             self._drive_segment(segment_number)
+            
             logger.info("[NAV] Segment %d tamamlandı. 360° tarama başlıyor.",
                         segment_number)
             self._scan_360(segment_number)
+            
+            segment_number += 1
 
-        logger.info("[NAV] Maksimum segment sayısına (%d) ulaşıldı. Duruyorum.",
-                    MAX_SEGMENTS)
+        final_odo = m2_motor.get_total_distance_cm()
+        logger.info("[NAV] Navigasyon tamamlandı. Toplam kat edilen mesafe: %.1f cm. Duruyorum.", final_odo - start_odo)
         self.shutdown()
 
     def shutdown(self) -> None:
@@ -138,20 +147,23 @@ class NavigationController:
     # ──────────────────────────────────────────────────────────────────────
 
     def _drive_segment(self, segment_id: int) -> None:
-        """SEGMENT_CM kadar ileri sürer. Yol boyunca:
-        - Engel varsa dur (ObstacleBlockedError fırlat).
-        - Her CENTERING_INTERVAL_CM'de merkez kontrolü yap.
-        """
+        """SEGMENT_CM kadar ileri sürer. Yol boyunca engel kontrolü ve güvenlik kontrolleri yapar."""
         m2_motor.reset_encoder_window()
         m2_motor.motor_drive("forward", config.DRIVE_SPEED)
         is_driving = True
 
-        traveled   = 0.0
-        next_center_at = CENTERING_INTERVAL_CM  # İlk merkez kontrolü km'si
+        segment_start_dist = m2_motor.get_total_distance_cm()
+
+        start_time = time.time()
+        timeout = 60.0  # 5 metre için 60 saniye aşım süresi
+
+        last_ticks = m2_motor.get_encoder_ticks()
+        last_ticks_time = time.time()
 
         try:
             while True:
-                traveled = m2_motor.get_measured_distance_cm()
+                current_total = m2_motor.get_total_distance_cm()
+                traveled = (current_total - segment_start_dist) + m2_motor.get_measured_distance_cm()
 
                 # 1. Hedef mesafeye ulaşıldı mı?
                 if traveled >= SEGMENT_CM:
@@ -160,7 +172,23 @@ class NavigationController:
                         segment_id, traveled)
                     break
 
-                # 2. Batarya kontrolü
+                # 2. Güvenlik: Maksimum süre aşımı (Zaman aşımı)
+                if time.time() - start_time > timeout:
+                    logger.warning("[NAV] HATA: Sürüş zaman aşımına uğradı! (60 sn limit)")
+                    break
+
+                # 3. Güvenlik: Fiziksel encoder kontrolü (Tick alınıyor mu?)
+                current_ticks = m2_motor.get_encoder_ticks()
+                if current_ticks != last_ticks:
+                    last_ticks = current_ticks
+                    last_ticks_time = time.time()
+                elif time.time() - last_ticks_time > 3.0:
+                    from m2_motor.motor import MOCK_MODE
+                    if not MOCK_MODE:
+                        logger.error("[NAV] KRİTİK GÜVENLİK UYARISI: Motor çalışmasına rağmen encoder tickleri gelmiyor! Kablo bağlantılarını kontrol edin.")
+                        break
+
+                # 4. Batarya kontrolü
                 try:
                     from m6_decision.decision import check_battery_health
                     if not check_battery_health():
@@ -168,40 +196,50 @@ class NavigationController:
                 except ImportError:
                     pass
 
-                # 3. Engel kontrolü
+                # 5. Engel kontrolü
                 reading = m3_sensors.get_navigation_sensors_filtered()
                 front_cm = reading.front_cm
+                logger.info("[ULTRASONIC] Sol: %.1f cm | Ön: %.1f cm | Sağ: %.1f cm", 
+                            reading.left_cm, front_cm, reading.right_cm)
+
                 if 0 < front_cm <= config.OBSTACLE_THRESHOLD_CM:
                     logger.warning(
-                        "[ENGEL] Önde engel: %.1f cm — segment durduruluyor.",
+                        "[ENGEL] Önde engel: %.1f cm. Sürüş durduruluyor ve bypass manevrası başlatılıyor...",
                         front_cm)
                     m2_motor.stop()
                     is_driving = False
-                    raise ObstacleBlockedError(
-                        f"Engel: {front_cm:.1f} cm (eşik: {config.OBSTACLE_THRESHOLD_CM})")
 
-                # 4. Periyodik merkez kontrolü
-                if traveled >= next_center_at:
-                    m2_motor.stop()
-                    is_driving = False
-                    logger.info("[CENTER] %.0f cm'de merkez kontrolü.", traveled)
-                    self._periodic_center_correction()
-                    next_center_at += CENTERING_INTERVAL_CM
-                    # Sürüşe devam
+                    # Güncel penceredeki mesafeyi odometer'a kaydet
+                    current_window = m2_motor.get_measured_distance_cm()
+                    m2_motor.set_total_distance_cm(current_total + current_window)
+
+                    # Kaçınma manevrasını başlat
+                    from m5_navigation.position import PositionVerifier
+                    from m5_navigation.obstacle import ObstacleAvoidance
+                    pv = PositionVerifier()
+                    oa = ObstacleAvoidance(pv)
+                    oa.avoid(segment_id, front_cm)
+
+                    # Sürüşe devam et
                     m2_motor.reset_encoder_window()
-                    m2_motor.set_total_distance_cm(traveled)
                     m2_motor.motor_drive("forward", config.DRIVE_SPEED)
                     is_driving = True
 
                 time.sleep(0.05)
 
+        except KeyboardInterrupt:
+            logger.info("[NAV] Kullanıcı tarafından durduruldu (Ctrl+C).")
+            m2_motor.stop()
+            is_driving = False
+            raise
         finally:
             if is_driving:
                 m2_motor.stop()
 
-        # Toplam mesafeyi güncelle
+        # Son penceredeki mesafeyi odometer'a kalıcı olarak ekle
         current_total = m2_motor.get_total_distance_cm()
-        m2_motor.set_total_distance_cm(current_total + traveled)
+        final_window = m2_motor.get_measured_distance_cm()
+        m2_motor.set_total_distance_cm(current_total + final_window)
 
     # ──────────────────────────────────────────────────────────────────────
     # 360° tarama
