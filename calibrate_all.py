@@ -25,7 +25,6 @@ from __future__ import annotations
 import sys
 import os
 import time
-import threading
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config
@@ -45,39 +44,30 @@ LEVELS = 8                # 1-8 arası seçenek
 ENCODER_CHECK_SEC = 3.0   # Encoder testi süresi
 
 
-# ── Encoder doğrulama ──────────────────────────────────────────
+# ── Encoder doğrulama (polling — interrupt kilidine karşı güvenli) ──
 def test_encoder_alive() -> bool:
     """Motor çalıştırmadan encoder pulse gelip gelmediğini kontrol et.
 
-    Kullanıcı tekerlekleri elle çevirir, ekranda tick sayısı artar.
+    Interrupt (add_event_detect) yerine polling (GPIO.input) kullanır.
+    RPi.GPIO interrupt'ları kernel/sysfs kalıntılarından dolayı
+    kilitlenebiliyor — polling bu sorundan etkilenmez.
+
+    Kullanıcı tekerlekleri elle çevirir, ekranda pulse sayısı artar.
     """
     if MOCK_MODE:
         print("[MOCK] Encoder testi atlanıyor.")
         return True
 
+    try:
+        GPIO.cleanup()
+    except Exception:
+        pass
+    time.sleep(0.1)
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
 
-    left_ticks = 0
-    right_ticks = 0
-    lock = threading.Lock()
-
-    def _on_left(_ch):
-        nonlocal left_ticks
-        with lock:
-            left_ticks += 1
-
-    def _on_right(_ch):
-        nonlocal right_ticks
-        with lock:
-            right_ticks += 1
-
     GPIO.setup(config.ENCODER_LEFT_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
     GPIO.setup(config.ENCODER_RIGHT_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-    GPIO.add_event_detect(config.ENCODER_LEFT_PIN, GPIO.RISING,
-                          callback=_on_left, bouncetime=2)
-    GPIO.add_event_detect(config.ENCODER_RIGHT_PIN, GPIO.RISING,
-                          callback=_on_right, bouncetime=2)
 
     print()
     print("=" * 56)
@@ -90,26 +80,39 @@ def test_encoder_alive() -> bool:
     print(f"  {ENCODER_CHECK_SEC:.0f} saniye boyunca pulse sayılacak...")
     print()
 
+    left_ticks = 0
+    right_ticks = 0
+    last_left = GPIO.input(config.ENCODER_LEFT_PIN)
+    last_right = GPIO.input(config.ENCODER_RIGHT_PIN)
+
     start = time.time()
     last_print = 0.0
     try:
         while time.time() - start < ENCODER_CHECK_SEC:
+            lv = GPIO.input(config.ENCODER_LEFT_PIN)
+            rv = GPIO.input(config.ENCODER_RIGHT_PIN)
+
+            # Rising edge sayacı (LOW→HIGH geçişi)
+            if lv == 1 and last_left == 0:
+                left_ticks += 1
+            if rv == 1 and last_right == 0:
+                right_ticks += 1
+            last_left = lv
+            last_right = rv
+
             now = time.time()
             if now - last_print >= 0.3:
-                with lock:
-                    sys.stdout.write(
-                        f"\r  Süre: {now - start:.1f}s | "
-                        f"Sol pulse: {left_ticks} | Sağ pulse: {right_ticks}    "
-                    )
-                    sys.stdout.flush()
+                sys.stdout.write(
+                    f"\r  Süre: {now - start:.1f}s | "
+                    f"Sol pulse: {left_ticks} | Sağ pulse: {right_ticks}    "
+                )
+                sys.stdout.flush()
                 last_print = now
-            time.sleep(0.05)
+            time.sleep(0.005)  # 200Hz polling — kaçırma riski düşük
     except KeyboardInterrupt:
         pass
 
-    GPIO.remove_event_detect(config.ENCODER_LEFT_PIN)
-    GPIO.remove_event_detect(config.ENCODER_RIGHT_PIN)
-    # Don't cleanup — main calibration will re-init
+    GPIO.cleanup()
 
     print()
     print(f"  Sonuç: Sol = {left_ticks} pulse | Sağ = {right_ticks} pulse")
@@ -196,40 +199,35 @@ def run_calibration():
         # Sıfırla
         m2_motor.reset_encoder_window()
         ticks_before_left, ticks_before_right = m2_motor.get_encoder_ticks()
-        odo_before = m2_motor.get_total_distance_cm()
 
-        # Sür
-        print(f"  Sürüş başlıyor: {target_cm:.0f} cm...")
+        # ZAMAN BAZLI SÜRÜŞ — enkoder kalibre olmadan güvenilir tek yöntem.
+        # Tahmini hız MOCK_CM_PER_SEC'den hesaplanır. Gerçek hız farklıysa
+        # kullanıcı mezura ile ölçer, biz gerçek hızı hesaplarız.
+        estimated_speed = config.MOCK_CM_PER_SEC  # 20 cm/s tahmini
+        drive_time = target_cm / estimated_speed
+
+        print(f"  Sürüş başlıyor: {drive_time:.1f} saniye @ %{config.DRIVE_SPEED} PWM...")
+        print(f"  (Tahmini hız: {estimated_speed:.0f} cm/s)")
         t_start = time.monotonic()
-        m2_motor.motor_drive("forward", config.DRIVE_SPEED)
 
-        # Encoder'ı canlı izle
-        deadline = t_start + (target_cm / max(config.MOCK_CM_PER_SEC, 5.0)) * 15.0
-        last_print = 0.0
         try:
-            while True:
-                now = time.monotonic()
-                elapsed = now - t_start
-                window_cm = m2_motor.get_measured_distance_cm()
-                traveled = odo_before + window_cm
+            m2_motor.motor_drive("forward", config.DRIVE_SPEED)
 
-                if now - last_print >= 0.3:
+            # Canlı durum — enkoder tick'lerini izle
+            last_print = 0.0
+            while True:
+                elapsed = time.monotonic() - t_start
+                if elapsed >= drive_time:
+                    break
+                if elapsed - last_print >= 0.3:
                     tl, tr = m2_motor.get_encoder_ticks()
                     sys.stdout.write(
-                        f"\r  {elapsed:5.1f}s | "
-                        f"Enkoder: {window_cm:7.1f} cm | "
-                        f"Hedef: {target_cm:.0f} cm | "
+                        f"\r  {elapsed:5.1f}/{drive_time:.1f}s | "
                         f"Tick L:{tl} R:{tr}   "
                     )
                     sys.stdout.flush()
-                    last_print = now
-
-                if window_cm >= target_cm:
-                    break
-                if now > deadline:
-                    print(f"\n  ⚠️ Zaman aşımı ({elapsed:.1f}s)")
-                    break
-                time.sleep(0.05)
+                    last_print = elapsed
+                time.sleep(0.02)
 
         except KeyboardInterrupt:
             print("\n  Kullanıcı kesti.")
@@ -241,21 +239,13 @@ def run_calibration():
 
         # Son enkoder okuması
         ticks_after_left, ticks_after_right = m2_motor.get_encoder_ticks()
-        window_cm = m2_motor.get_measured_distance_cm()
-        odo_after = m2_motor.get_total_distance_cm()
 
         delta_ticks_left = ticks_after_left - ticks_before_left
         delta_ticks_right = ticks_after_right - ticks_before_right
         avg_ticks = (delta_ticks_left + delta_ticks_right) / 2.0
 
-        # Zaman bazlı tahmin
-        time_estimate_cm = elapsed * config.MOCK_CM_PER_SEC
-
-        # Enkoder hesaplanan hız
-        if elapsed > 0.1:
-            encoder_speed_cm_s = window_cm / elapsed
-        else:
-            encoder_speed_cm_s = 0.0
+        # Enkoder hesaplanan mesafe (mevcut kalibrasyonla)
+        encoder_cm = m2_motor.get_measured_distance_cm()
 
         print()
         print(f"  ── Sonuçlar ──")
@@ -263,9 +253,8 @@ def run_calibration():
         print(f"  Sol tick:         {delta_ticks_left}")
         print(f"  Sağ tick:         {delta_ticks_right}")
         print(f"  Ortalama tick:    {avg_ticks:.1f}")
-        print(f"  Enkoder mesafe:   {window_cm:.1f} cm")
-        print(f"  Zaman tahmini:    {time_estimate_cm:.1f} cm")
-        print(f"  Enkoder hız:      {encoder_speed_cm_s:.1f} cm/s")
+        print(f"  Enkoder mesafe:   {encoder_cm:.1f} cm (mevcut kalibrasyonla)")
+        print(f"  Tahmini mesafe:   {target_cm:.0f} cm (hedef)")
         print()
 
         # Kullanıcıdan fiziksel ölçüm
@@ -285,10 +274,8 @@ def run_calibration():
             "ticks_left": delta_ticks_left,
             "ticks_right": delta_ticks_right,
             "avg_ticks": avg_ticks,
-            "encoder_cm": round(window_cm, 1),
-            "time_cm": round(time_estimate_cm, 1),
+            "encoder_cm": round(encoder_cm, 1),
             "actual_cm": actual_cm,
-            "encoder_speed_cm_s": round(encoder_speed_cm_s, 1),
         })
 
         # Anlık kalibrasyon hesapla
@@ -323,10 +310,10 @@ def _print_results(results: list[dict]) -> None:
     print("  KALİBRASYON SONUÇLARI")
     print("=" * 90)
     print()
-    print(f"  {'Seviye':>6} | {'Hedef':>7} | {'Süre':>6} | {'Tick L':>7} | {'Tick R':>7} | "
-          f"{'Enkoder':>8} | {'Zaman':>7} | {'Gerçek':>8} | {'Hata':>7}")
-    print(f"  {'':>6} | {'cm':>7} | {'s':>6} | {'':>7} | {'':>7} | "
-          f"{'cm':>8} | {'cm':>7} | {'cm':>8} | {'%':>7}")
+    print(f"  {'Seviye':>6} | {'Süre':>6} | {'Tick L':>7} | {'Tick R':>7} | "
+          f"{'Enkoder':>8} | {'Gerçek':>8} | {'Hata':>7}")
+    print(f"  {'':>6} | {'s':>6} | {'':>7} | {'':>7} | "
+          f"{'cm':>8} | {'cm':>8} | {'%':>7}")
     print("  " + "-" * 86)
 
     for r in results:
@@ -337,9 +324,9 @@ def _print_results(results: list[dict]) -> None:
         else:
             err_str = "---"
 
-        print(f"  {r['level']:>6} | {r['target_cm']:>7.0f} | {r['elapsed_s']:>6.2f} | "
+        print(f"  {r['level']:>6} | {r['elapsed_s']:>6.2f} | "
               f"{r['ticks_left']:>7} | {r['ticks_right']:>7} | "
-              f"{r['encoder_cm']:>8.1f} | {r['time_cm']:>7.1f} | "
+              f"{r['encoder_cm']:>8.1f} | "
               f"{actual:>8} | {err_str:>7}")
 
     # Kalibrasyon hesapla
@@ -363,8 +350,8 @@ def _print_results(results: list[dict]) -> None:
             total_s = sum(s for _, s in speed_entries)
             recommended_speed = total_cm / total_s
             print()
-            print(f"  Mevcut MOCK_CM_PER_SEC     = {config.MOCK_CM_PER_SEC:.1f}")
-            print(f"  Önerilen MOCK_CM_PER_SEC    = {recommended_speed:.1f}")
+            print(f"  Mevcut MOCK_CM_PER_SEC     = {config.MOCK_CM_PER_SEC:.1f} cm/s")
+            print(f"  Önerilen MOCK_CM_PER_SEC    = {recommended_speed:.1f} cm/s")
 
         print()
         print("  config.py'de bu değerleri güncelleyin:")

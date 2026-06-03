@@ -95,8 +95,8 @@ START_RIGHT_CM = 200.0
 POSITION_TOLERANCE_CM = 5.0
 FINE_TUNE_STEP_CM     = 2.0
 
-# Encoder calibration (20 ticks per 20.73cm wheel revolution -> ~0.965 ticks/cm)
-ENCODER_TICKS_PER_CM = 1.6239
+# Encoder calibration (fiziksel kalibrasyon — 2026-06-04, 5 ölçüm ortalaması)
+ENCODER_TICKS_PER_CM = 1.6650
 # Slots on the encoder disc = ticks per full wheel revolution. Set to your
 # actual disc slot count (common slotted optical discs are 20). Used for RPM.
 ENCODER_TICKS_PER_REV = 20.0
@@ -113,10 +113,10 @@ TURN_KICK_SPEED   = 100  # kick sırasında PWM (0-100)
 TURN_KICK_SECONDS = 0.15 # kick süresi (toplam dönüş süresinden düşülür)
 # Motor speed trims to correct forward drift (1.0 = no trim)
 # If the robot drifts right, decrease LEFT_MOTOR_TRIM (e.g. 0.90)
-LEFT_MOTOR_TRIM = 1.0
+LEFT_MOTOR_TRIM = 0.9925  # sol teker ~%0.75 hızlı → hafif sağa çekme düzeltmesi
 RIGHT_MOTOR_TRIM = 1.0
 # Time-based fallback for distance/turn when no encoder is wired (mock or hardware-absent)
-MOCK_CM_PER_SEC      = 20.0  # nominal forward speed at DRIVE_SPEED duty
+MOCK_CM_PER_SEC      = 70.0  # fiziksel kalibrasyon — %60 PWM'de gerçek hız
 # 90° pivot süresi @ TURN_SPEED. NOT: TURN_SPEED arttığı için bu küçültüldü.
 # FİZİKSEL KALİBRASYON: dönüş 90°'yi aşıyorsa bu değeri düşür, az dönüyorsa artır.
 MOCK_TURN_90_SECONDS = 0.80
