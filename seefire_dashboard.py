@@ -3,7 +3,7 @@
 SeeFire unified cockpit: drive control + live sensor dashboard in one screen.
 
 Flow:
-    1. Ask max speed level (1-10).
+    1. Ask max forward speed level (1-25) and turning speed level (1-25).
     2. 5 s device check screen: probe every attached device, show PASS/FAIL.
     3. Main screen:
          - top:    ASCII robot with wheel-pair power/RPM/speed and the three
@@ -50,7 +50,7 @@ STEER_INNER_SCALE = 0.35
 TURN_SCALE = 1.0
 
 MIN_SPEED_LEVEL = 1
-MAX_SPEED_LEVEL = 10
+MAX_SPEED_LEVEL = 25
 
 CHECK_SECONDS = 5
 SENSOR_INTERVAL = 0.5
@@ -172,12 +172,14 @@ def approach(current: float, target: float, step: float) -> float:
 
 
 class RideController:
-    def __init__(self, hw: DriveHardware, max_level: int) -> None:
+    def __init__(self, hw: DriveHardware, fwd_level: int, turn_level: int) -> None:
         self.hw = hw
-        self.max_level = max_level
-        self.max_pwm = float(max_level * 10)
-        self.accel = max(40.0, self.max_pwm * 1.25)
-        self.decel = max(100.0, self.max_pwm * 3.0)
+        self.fwd_level = fwd_level
+        self.turn_level = turn_level
+        self.max_pwm_fwd = float(fwd_level * 4)
+        self.max_pwm_turn = float(turn_level * 4)
+        self.accel = max(40.0, max(self.max_pwm_fwd, self.max_pwm_turn) * 1.25)
+        self.decel = max(100.0, max(self.max_pwm_fwd, self.max_pwm_turn) * 3.0)
         self.left = 0.0
         self.right = 0.0
         self.last_seen: dict[str, float] = {}
@@ -218,10 +220,9 @@ class RideController:
         if left_key and right_key and not (fwd or back):
             return 0.0, 0.0, "Cakisik A+D"
 
-        max_pwm = self.max_pwm
         if fwd or back:
             sign = 1.0 if fwd else -1.0
-            base = sign * max_pwm
+            base = sign * self.max_pwm_fwd
             inner = base * STEER_INNER_SCALE
             dir_label = "Ileri" if fwd else "Geri"
             if right_key:
@@ -231,7 +232,7 @@ class RideController:
             return base, base, dir_label
 
         # Stationary: tank turn (sides spin opposite directions).
-        turn = max_pwm * TURN_SCALE
+        turn = self.max_pwm_turn * TURN_SCALE
         if right_key:
             return turn, -turn, "Tank sag"
         if left_key:
@@ -502,19 +503,32 @@ class SensorHub:
 # ---------------------------------------------------------------------------
 # UI helpers
 # ---------------------------------------------------------------------------
-def ask_speed_level() -> int:
-    print("Maks hiz derecesi sec (1-10)")
-    print("1=%10 PWM, 3=%30 PWM, 6=%60 PWM, 10=%100 PWM")
+def _ask_level(prompt: str, hint: str) -> int:
+    print(prompt)
+    print(hint)
     while True:
-        raw = input("Hiz derecesi: ").strip()
+        raw = input("Derece: ").strip()
         try:
             level = int(raw)
         except ValueError:
-            print("1 ile 10 arasi sayi gir.")
+            print(f"{MIN_SPEED_LEVEL} ile {MAX_SPEED_LEVEL} arasi sayi gir.")
             continue
         if MIN_SPEED_LEVEL <= level <= MAX_SPEED_LEVEL:
             return level
-        print("1 ile 10 arasi sayi gir.")
+        print(f"{MIN_SPEED_LEVEL} ile {MAX_SPEED_LEVEL} arasi sayi gir.")
+
+
+def ask_speed_levels() -> tuple[int, int]:
+    print("=== Guc Ayarlari ===")
+    fwd = _ask_level(
+        "Ileri/geri guc derecesi sec (1-25)",
+        "1=%4 PWM, 5=%20 PWM, 13=%52 PWM, 25=%100 PWM",
+    )
+    turn = _ask_level(
+        "Donus guc derecesi sec (1-25)",
+        "1=%4 PWM, 5=%20 PWM, 13=%52 PWM, 25=%100 PWM",
+    )
+    return fwd, turn
 
 
 def fmt_power(value: float) -> str:
@@ -560,14 +574,7 @@ def draw_main(stdscr, ride: RideController, hub: SensorHub) -> None:
     stdscr.erase()
     width = 100
     _addstr(stdscr, 0, 0, "SeeFire KOKPIT (surus + sensor)".center(width))
-    _addstr(
-        stdscr,
-        1,
-        0,
-        f"Hiz level {ride.max_level} | max PWM {ride.max_pwm:.0f}% | {ride.message}".center(
-            width
-        ),
-    )
+    _addstr(stdscr, 1, 0, f"Ileri guc {ride.fwd_level} (PWM {ride.max_pwm_fwd:.0f}%) | Donus guc {ride.turn_level} (PWM {ride.max_pwm_turn:.0f}%) | {ride.message}".center(width))
     _addstr(stdscr, 2, 0, "=" * width)
     _addstr(
         stdscr, 3, 2, "W ileri | S geri | A sol | D sag | SPACE dur | P foto | Q cikis"
@@ -617,7 +624,7 @@ def draw_main(stdscr, ride: RideController, hub: SensorHub) -> None:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
-def curses_main(stdscr, level: int) -> int:
+def curses_main(stdscr, fwd_level: int, turn_level: int) -> int:
     curses.curs_set(0)
     stdscr.nodelay(True)
     stdscr.keypad(True)
@@ -635,7 +642,7 @@ def curses_main(stdscr, level: int) -> int:
     GPIO.setwarnings(False)
 
     hw = DriveHardware()
-    ride = RideController(hw, level)
+    ride = RideController(hw, fwd_level, turn_level)
     hub = SensorHub(GPIO)
 
     running = True
@@ -698,11 +705,12 @@ def curses_main(stdscr, level: int) -> int:
 
 
 def main() -> int:
-    level = ask_speed_level()
-    print("\nBasliyor. Robot tekerleri yerden kesik olsun veya genis alan olsun.")
+    fwd_level, turn_level = ask_speed_levels()
+    print(f"\nIleri guc: {fwd_level} (PWM {fwd_level*4}%) | Donus guc: {turn_level} (PWM {turn_level*4}%)")
+    print("Basliyor. Robot tekerleri yerden kesik olsun veya genis alan olsun.")
     print("Cikis: Q veya Ctrl+C")
     time.sleep(1.5)
-    return curses.wrapper(curses_main, level)
+    return curses.wrapper(curses_main, fwd_level, turn_level)
 
 
 if __name__ == "__main__":
