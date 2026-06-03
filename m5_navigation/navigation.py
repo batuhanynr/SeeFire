@@ -55,8 +55,7 @@ class NavigationController:
     def __init__(self, snapshot_callback=None):
         """
         snapshot_callback: callable(label: str) → None
-            M6/M7 entegrasyonu için fotoğraf/veri kayıt hook'u.
-            None ise varsayılan (sadece log) kullanılır.
+            M6/M7 entegrasyonu için fotoğraf/veri kayıt hook'u (artık kullanılmıyor).
         """
         self._snapshot_cb = snapshot_callback or self._default_snapshot
 
@@ -250,50 +249,54 @@ class NavigationController:
     # ──────────────────────────────────────────────────────────────────────
  
     def _scan_360(self, segment_id: int) -> None:
-        """Robot durur. 
-        1. Sağa 90° döner, fotoğraf çeker/arama yapar, sola 90° dönüp kuzeye bakar.
-        2. Sola 90° döner, fotoğraf çeker/arama yapar, sağa 90° dönüp kuzeye bakar.
+        """Checkpoint taraması: sağ → sol → sol → sağ (4 × 90°).
+
+        Her yönde robot durur, YOLO'nun görüntüyü işlemesi için
+        config.SCAN_FIRE_SETTLE_S saniye beklenir (varsayılan 4s =
+        ~1s mekanik titreşim + ~15 YOLO karesi @ 5 FPS), ardından
+        M6 yangın tespiti callback'i çağrılır.
+
+        Navigasyon yön kararları bu callback'ten ETKİLENMEZ;
+        yalnızca yangın fusion skoru güncellenir.
         """
         m2_motor.stop()
-        logger.info("[SCAN] Tarama başlıyor (segment %d). Durma stabilizasyonu için bekleniyor...", segment_id)
+        logger.info("[SCAN] Checkpoint %d — tarama başlıyor. Stabilizasyon bekleniyor...", segment_id)
         time.sleep(1.5)
- 
-        # 1. Sağa dön ve tara
-        logger.info("[SCAN] Sağa (DOĞU) dönülüyor...")
+
+        # ── Adım 1: Sağa 90° (→ Doğu) ────────────────────────────────────
+        logger.info("[SCAN] Adım 1/4: SAĞA 90° dönülüyor (Doğu)...")
         m2_motor.turn_right_90()
-        logger.info("[SCAN] Dönüş sonrası duruluyor ve bekleniyor...")
-        time.sleep(1.0)
-        
-        logger.info("[SCAN] Yön: D — snapshot alınıyor...")
+
+        logger.info("[SCAN] YOLO için %.0f sn bekleniyor (Doğu yönü)...",
+                    config.SCAN_FIRE_SETTLE_S)
+        time.sleep(config.SCAN_FIRE_SETTLE_S)
+
+        logger.info("[SCAN] Yangın tespiti kontrol ediliyor (Doğu)...")
         self._snapshot_cb(f"seg{segment_id}-D")
-        time.sleep(SCAN_WAIT_S)
-        
-        logger.info("[SCAN] Sola dönmeden önce duruluyor ve bekleniyor...")
-        time.sleep(1.0)
-        logger.info("[SCAN] Sola dönüp tekrar Kuzey yönüne bakılıyor...")
+
+        # ── Adım 2: Sola 90° (→ Kuzey) ────────────────────────────────────
+        logger.info("[SCAN] Adım 2/4: SOLA 90° dönülüyor (Kuzey)...")
         m2_motor.turn_left_90()
-        logger.info("[SCAN] Kuzeye dönüş sonrası duruluyor ve bekleniyor...")
-        time.sleep(1.5)
- 
-        # 2. Sola dön ve tara
-        logger.info("[SCAN] Sola (BATI) dönülüyor...")
-        m2_motor.turn_left_90()
-        logger.info("[SCAN] Dönüş sonrası duruluyor ve bekleniyor...")
         time.sleep(1.0)
-        
-        logger.info("[SCAN] Yön: B — snapshot alınıyor...")
+
+        # ── Adım 3: Sola 90° (→ Batı) ─────────────────────────────────────
+        logger.info("[SCAN] Adım 3/4: SOLA 90° dönülüyor (Batı)...")
+        m2_motor.turn_left_90()
+
+        logger.info("[SCAN] YOLO için %.0f sn bekleniyor (Batı yönü)...",
+                    config.SCAN_FIRE_SETTLE_S)
+        time.sleep(config.SCAN_FIRE_SETTLE_S)
+
+        logger.info("[SCAN] Yangın tespiti kontrol ediliyor (Batı)...")
         self._snapshot_cb(f"seg{segment_id}-B")
-        time.sleep(SCAN_WAIT_S)
-        
-        logger.info("[SCAN] Sağa dönmeden önce duruluyor ve bekleniyor...")
-        time.sleep(1.0)
-        logger.info("[SCAN] Sağa dönüp tekrar Kuzey yönüne bakılıyor...")
+
+        # ── Adım 4: Sağa 90° (→ Kuzey) ────────────────────────────────────
+        logger.info("[SCAN] Adım 4/4: SAĞA 90° dönülüyor (Kuzey)...")
         m2_motor.turn_right_90()
-        logger.info("[SCAN] Kuzeye dönüş sonrası duruluyor ve bekleniyor...")
         time.sleep(1.5)
- 
-        logger.info("[SCAN] Tarama tamamlandı.")
-        time.sleep(1.5)
+
+        logger.info("[SCAN] Checkpoint %d taraması tamamlandı. Kuzeye devam ediliyor.", segment_id)
+
 
     # ──────────────────────────────────────────────────────────────────────
     # Periyodik merkez düzeltme (sürüş içinde)
@@ -353,4 +356,4 @@ class NavigationController:
 
     @staticmethod
     def _default_snapshot(label: str) -> None:
-        logger.info("[SNAPSHOT] %s (Kameradan navigasyon için veri alma kaldırıldı)", label)
+        logger.info("[SNAPSHOT] %s (kullanılmıyor — navigasyon kameradan bağımsız)", label)
