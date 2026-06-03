@@ -1,0 +1,8 @@
+# Mac / geliştirme ortamı — RPi'ye özgü paketler YOK
+# Mock mode otomatik devreye girer (RPi.GPIO, smbus2, spidev olmadan)
+
+opencv-python>=4.8.0
+ultralytics>=8.0.0
+numpy>=1.24.0
+Pillow>=9.5.0
+pytest>=8.0.0
