@@ -184,8 +184,21 @@ class ObstacleAvoidance:
         m2_motor.set_total_distance_cm(before)
 
     def _decide_direction(self) -> str:
+        """Yön kararı: önce kamera (görüntü zaten oturdu), yoksa ultrasonik."""
+        try:
+            import m4_vision
+            cam_dir = m4_vision.determine_turn_direction_stable()
+            if cam_dir is not None:
+                logger.info("[OBSTACLE] Kamera yön kararı: %s", cam_dir)
+                return cam_dir
+        except Exception as exc:
+            logger.warning("[OBSTACLE] Kamera yön kararı alınamadı: %s", exc)
+
         reading = m3_sensors.get_navigation_sensors_filtered()
-        return "RIGHT" if reading.right_cm > reading.left_cm else "LEFT"
+        direction = "RIGHT" if reading.right_cm > reading.left_cm else "LEFT"
+        logger.info("[OBSTACLE] Ultrasonik yön kararı: sol=%.1f sağ=%.1f → %s",
+                    reading.left_cm, reading.right_cm, direction)
+        return direction
 
     def _side_pass(self, sector_id: int, direction: str,
                    reference_distance: float):

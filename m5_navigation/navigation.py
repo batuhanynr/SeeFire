@@ -203,14 +203,20 @@ class NavigationController:
 
                 if 0 < front_cm <= config.OBSTACLE_THRESHOLD_CM:
                     logger.warning(
-                        "[ENGEL] Önde engel: %.1f cm. Sürüş durduruluyor ve bypass manevrası başlatılıyor...",
-                        front_cm)
+                        "[ENGEL] Önde engel: %.1f cm. DURUYORUM.", front_cm)
                     m2_motor.stop()
                     is_driving = False
 
                     # Güncel penceredeki mesafeyi odometer'a kaydet
                     current_window = m2_motor.get_measured_distance_cm()
                     m2_motor.set_total_distance_cm(current_total + current_window)
+
+                    # Kamera görüntüsü oturana kadar bekle (ucuz kamerada gecikme var)
+                    settle = config.OBSTACLE_CAMERA_SETTLE_S
+                    logger.info(
+                        "[ENGEL] Kamera görüntüsü oturuyor, %.0f sn bekleniyor...", settle)
+                    time.sleep(settle)
+                    logger.info("[ENGEL] Bekleme tamamlandı, bypass manevrası başlıyor.")
 
                     # Kaçınma manevrasını başlat
                     from m5_navigation.position import PositionVerifier

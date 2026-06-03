@@ -467,32 +467,82 @@ class VisionM4:
         return "RIGHT" if left_area > right_area else "LEFT"
 
     def _pixel_count_direction_hint(self, frame: "np.ndarray") -> Optional[str]:
-        """Pixel-count obstacle heuristic.
+        """Ağırlıklı piksel-yoğunluk engel buluşsal yöntemi.
 
-        1. Convert to grayscale → Gaussian blur → Canny edges.
-        2. Focus on lower half of frame (where close obstacles dominate).
-        3. Count edge pixels in left half vs right half.
-        4. Fewer edge pixels = less obstacle = more free space → go that way.
+        Kareyi iki dikey ROI'ya böler:
+          - Alt 1/3 (çok yakın engel): ağırlık 3×
+          - Orta 1/3 (yakın engel):    ağırlık 2×
+          - Üst 1/3 (uzak alan):       ağırlık 1×
 
-        This is more robust than the gap approach: it considers the full
-        density of obstacles across each side, not just the outermost edge.
+        Her bölgede Canny kenar pikselleri sol/sağ yarıya ayrılarak sayılır.
+        Ağırlıklı toplamı az olan taraf → daha az engel → o tarafa dön.
+
+        Karar için en az %20 asimetri şartı aranır (gürültü bağışıklığı).
         """
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        edges = cv2.Canny(blurred, 50, 150)
+        blurred = cv2.GaussianBlur(gray, (7, 7), 0)
+        edges = cv2.Canny(blurred, 40, 120)
 
         h, w = edges.shape
-        roi = edges[h // 2:, :]  # lower half — close obstacles prominent here
+        mid = w // 2
+        h3  = h // 3
 
-        left_pixels = int(roi[:, : w // 2].sum() // 255)
-        right_pixels = int(roi[:, w // 2 :].sum() // 255)
+        # Üç yatay kuşak (aşağıdan yukarı): yakın → uzak
+        bands = [
+            (edges[2 * h3:,       :], 3),  # alt 1/3 — çok yakın
+            (edges[h3:2 * h3,     :], 2),  # orta 1/3
+            (edges[:h3,           :], 1),  # üst 1/3
+        ]
 
-        total = left_pixels + right_pixels
-        if total < 20:  # too few edges → no significant obstacle, let ultrasonic decide
+        left_score  = 0.0
+        right_score = 0.0
+        for band, weight in bands:
+            left_score  += band[:, :mid].sum() / 255.0 * weight
+            right_score += band[:, mid:].sum() / 255.0 * weight
+
+        total = left_score + right_score
+        if total < 30:  # yetersiz kenar → ultrasonik'e bırak
             return None
 
-        logger.debug("[VISION] Pixel count — left: %d  right: %d", left_pixels, right_pixels)
-        return "RIGHT" if left_pixels > right_pixels else "LEFT"
+        # %20 asimetri şartı yoksa None döndür (eşit engel → ultrasonik daha güvenilir)
+        imbalance = abs(left_score - right_score) / total
+        if imbalance < 0.20:
+            return None
+
+        logger.debug(
+            "[VISION] Ağırlıklı piksel — sol: %.1f  sağ: %.1f  asimetri: %.2f",
+            left_score, right_score, imbalance,
+        )
+        return "RIGHT" if left_score > right_score else "LEFT"
+
+    def determine_turn_direction_stable(
+        self, n_samples: int = 5, interval_s: float = 0.8
+    ) -> Optional[str]:
+        """n_samples kare üzerinde oy çokluğuyla kararlı yön kararı.
+
+        Ucuz kameralarda tek kare yanıltıcı olabilir. Kamera zaten duraksama
+        sırasında oturdu; burada sadece kararlılık için birkaç kare toplanır.
+        """
+        if not CV_AVAILABLE:
+            return None
+        votes: list[str] = []
+        for _ in range(n_samples):
+            d = self.determine_turn_direction()
+            if d is not None:
+                votes.append(d)
+            time.sleep(interval_s)
+        if not votes:
+            return None
+        left_v  = votes.count("LEFT")
+        right_v = votes.count("RIGHT")
+        if left_v == right_v:
+            return None
+        result = "LEFT" if left_v > right_v else "RIGHT"
+        logger.info(
+            "[VISION] Kararlı yön kararı: %s  (LEFT×%d RIGHT×%d)",
+            result, left_v, right_v,
+        )
+        return result
 
     def get_fire_side(self) -> Optional[str]:
         """'LEFT' | 'RIGHT' | None — frame side where fire was last detected (thread-safe)."""
@@ -563,5 +613,6 @@ get_fire_confidence = _instance.get_fire_confidence
 get_smoke_confidence = _instance.get_smoke_confidence
 get_fire_side = _instance.get_fire_side
 determine_turn_direction = _instance.determine_turn_direction
+determine_turn_direction_stable = _instance.determine_turn_direction_stable
 get_heading_correction = _instance.get_heading_correction
 close = _instance.close
