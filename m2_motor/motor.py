@@ -212,12 +212,12 @@ class MotorM2:
         trimmed_speed = int(abs(speed) * getattr(config, "RIGHT_MOTOR_TRIM", 1.0))
         trimmed_speed = max(0, min(100, trimmed_speed))
         if speed > 0:
-            GPIO.output(config.MOTOR_IN3, GPIO.LOW)
-            GPIO.output(config.MOTOR_IN4, GPIO.HIGH)
-            self.pwm_b.ChangeDutyCycle(trimmed_speed)
-        elif speed < 0:
             GPIO.output(config.MOTOR_IN3, GPIO.HIGH)
             GPIO.output(config.MOTOR_IN4, GPIO.LOW)
+            self.pwm_b.ChangeDutyCycle(trimmed_speed)
+        elif speed < 0:
+            GPIO.output(config.MOTOR_IN3, GPIO.LOW)
+            GPIO.output(config.MOTOR_IN4, GPIO.HIGH)
             self.pwm_b.ChangeDutyCycle(trimmed_speed)
         else:
             GPIO.output(config.MOTOR_IN3, GPIO.LOW)

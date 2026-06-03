@@ -134,14 +134,14 @@ class DriveHardware:
         self.pwm_a.ChangeDutyCycle(abs(speed))
 
     def _set_right(self, speed: float) -> None:
-        # Polarity inverted vs wiring: speed>0 (forward) drives IN3 LOW / IN4 HIGH.
+        # Tested polarity: speed>0 (forward) drives IN3 HIGH / IN4 LOW.
         gpio = self.gpio
         if speed > 0:
-            gpio.output(config.MOTOR_IN3, gpio.LOW)
-            gpio.output(config.MOTOR_IN4, gpio.HIGH)
-        elif speed < 0:
             gpio.output(config.MOTOR_IN3, gpio.HIGH)
             gpio.output(config.MOTOR_IN4, gpio.LOW)
+        elif speed < 0:
+            gpio.output(config.MOTOR_IN3, gpio.LOW)
+            gpio.output(config.MOTOR_IN4, gpio.HIGH)
         else:
             gpio.output(config.MOTOR_IN3, gpio.LOW)
             gpio.output(config.MOTOR_IN4, gpio.LOW)
@@ -216,12 +216,12 @@ class RideController:
                 return inner, base, f"{dir_label} sol"
             return base, base, dir_label
 
-        # Stationary: pivot turn (one side driven, other coasts).
+        # Stationary: tank turn (sides spin opposite directions).
         turn = max_pwm * TURN_SCALE
         if right_key:
-            return turn, 0.0, "Pivot sag"
+            return turn, -turn, "Tank sag"
         if left_key:
-            return 0.0, turn, "Pivot sol"
+            return -turn, turn, "Tank sol"
         return 0.0, 0.0, "Bos"
 
     def tick(self) -> None:
