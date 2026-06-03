@@ -77,13 +77,13 @@ class TestDecisionEngine(unittest.TestCase):
 
     @patch("m4_vision.capture_frame", return_value=None)
     @patch("m3_sensors.get_fusion_sensors")
-    @patch("m4_vision.get_fire_confidence", return_value=0.85)
+    @patch("m4_vision.get_fire_confidence", return_value=0.8)
     def test_on_snapshot_raises_verification_when_risk_high(self, mock_fire, mock_sensors, mock_frame):
-        # Set smoke, IR and vision values high enough to exceed FUSION_ALARM_THRESH (0.7)
-        # Vision: 0.85 * 0.5 = 0.425
-        # Smoke: 4095 (max) * 0.3 = 0.3
-        # IR Temp: 60.0 (threshold) * 0.2 = 0.2
-        # Total score: 0.425 + 0.3 + 0.2 = 0.92 → exceeds 0.7
+        # Simulate YOLO detecting fire (fire_conf=0.8) + high smoke + high IR
+        # Vision:  0.8 * 0.5  = 0.40
+        # Smoke:   4095/4095 * 0.3 = 0.30
+        # IR:      60/60 * 0.2     = 0.20
+        # Total score: 0.90 → exceeds FUSION_ALARM_THRESH (0.6)
         mock_sens = MagicMock()
         mock_sens.smoke_level = 4095.0
         mock_sens.ir_temp = 60.0
@@ -96,8 +96,28 @@ class TestDecisionEngine(unittest.TestCase):
             engine._on_snapshot("WAYPOINT")
 
         self.assertEqual(engine.state, RobotState.VERIFY)
-        self.assertGreaterEqual(engine.fusion_score, config.FUSION_ALARM_THRESH)
+        self.assertEqual(engine.fusion_score, 0.9)
 
+    @patch("m4_vision.capture_frame", return_value=None)
+    @patch("m3_sensors.get_fusion_sensors")
+    @patch("m4_vision.get_fire_confidence", return_value=0.0)
+    def test_on_snapshot_no_trigger_when_yolo_absent(self, mock_fire, mock_sensors, mock_frame):
+        # Without YOLO (fire_conf=0.0) and moderate sensors, score stays below alarm threshold.
+        # Vision:  0.0 * 0.5 = 0.00
+        # Smoke:   200/4095 * 0.3 ≈ 0.015
+        # IR:      35/60   * 0.2 ≈ 0.117
+        # Total ≈  0.13 — well below FUSION_ALARM_THRESH (0.6)
+        mock_sens = MagicMock()
+        mock_sens.smoke_level = 200.0
+        mock_sens.ir_temp = 35.0
+        mock_sensors.return_value = mock_sens
+
+        engine = DecisionEngine()
+        engine.state = RobotState.NAVIGATE
+
+        # Should NOT raise
+        engine._on_snapshot("MIDPOINT")
+        self.assertEqual(engine.state, RobotState.NAVIGATE)
 
     @patch("m5_navigation.navigation.NavigationController.run")
     def test_navigate_runs_nav_completely(self, mock_nav_run):

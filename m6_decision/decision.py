@@ -47,20 +47,23 @@ class DecisionEngine:
         frame = m4_vision.capture_frame()
         sensors = m3_sensors.get_fusion_sensors()
         fire_conf = m4_vision.get_fire_confidence()
+        fire_side = m4_vision.get_fire_side()
 
-        # 2. Logic to update global fusion score
-        # Use real fire confidence from YOLO only — no artificial floor
-        vision_conf = max(fire_conf, 0.0)
-        
+        # 2. Calculate fusion score using real YOLO confidence.
+        # When no model is loaded fire_conf=0.0; alarm can still trigger via
+        # high smoke_level + ir_temp alone (combined weight 0.5).
         self.fusion_score = self._calculate_fusion_score(
-            vision_conf=vision_conf,
+            vision_conf=fire_conf,
             smoke_val=float(sensors.smoke_level),
             ir_temp=float(sensors.ir_temp)
         )
-        
+
         # Check for state transition trigger
         if self.fusion_score >= config.FUSION_ALARM_THRESH and self.state == RobotState.NAVIGATE:
-            logger.warning("[DECISION] Fusion score %.2f exceeds alarm threshold!", self.fusion_score)
+            logger.warning(
+                "[DECISION] Fusion score %.2f exceeds alarm threshold! Fire side: %s",
+                self.fusion_score, fire_side or "unknown"
+            )
             self.state = RobotState.VERIFY
             raise ThreatVerificationTriggered("Threat verification triggered due to high fusion score")
 
@@ -72,7 +75,9 @@ class DecisionEngine:
             sensor_data=json.dumps({
                 "smoke": sensors.smoke_level,
                 "temp": sensors.ir_temp,
-                "distance": motor.get_total_distance_cm()
+                "distance": motor.get_total_distance_cm(),
+                "fire_side": fire_side,
+                "fire_conf": fire_conf,
             }),
             snapshot_path=""  # Updated below
         )
