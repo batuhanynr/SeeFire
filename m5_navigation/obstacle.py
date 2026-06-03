@@ -78,6 +78,7 @@ class ObstacleAvoidance:
         self._return_to_route(direction, side_distance)
         # Encoder already reflects only north progress (lateral moves rolled
         # back per step via _drive_lateral). No final correction needed.
+        self._position_verifier.align_to_corridor()
         self._position_verifier.verify_and_correct()
 
     # ------------------------------------------------------------------

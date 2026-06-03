@@ -262,7 +262,9 @@ class NavigationController:
             m2_motor.turn_right_90()         # Bir sonraki yöne dön
             time.sleep(0.2)                  # Dönüş sonrası stabilizasyon
 
-        logger.info("[SCAN] 360° tarama tamamlandı. Robot orijinal yönde.")
+        logger.info("[SCAN] 360° tarama tamamlandı. Robot orijinal yönde. Hizalama düzeltmesi başlatılıyor...")
+        from m5_navigation.position import PositionVerifier
+        PositionVerifier().align_to_corridor()
 
     # ──────────────────────────────────────────────────────────────────────
     # Periyodik merkez düzeltme (sürüş içinde)
