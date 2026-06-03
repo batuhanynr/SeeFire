@@ -45,8 +45,8 @@ MLX90614_ADDR = 0x5A
 
 SMOKE_THRESHOLD = 300
 IR_TEMP_THRESHOLD = 60.0
-VISION_CONF_THRESHOLD = 0.5
-FUSION_ALARM_THRESH = 0.7
+VISION_CONF_THRESHOLD = 0.25
+FUSION_ALARM_THRESH = 0.6
 FUSION_CLEAR_THRESH = 0.4
 
 # --- Navigation (waypoint-based, south-to-north traversal) ---
@@ -118,6 +118,20 @@ BYPASS_BATTERY_CHECK = True   # ADC kalibre edilene kadar True — gerçek çal�
 BATTERY_ADC_CH    = 1     # Which MCP3208 channel
 VDIV_R1           = 20000.0 # 20k Ohm
 VDIV_R2           = 10000.0 # 10k Ohm (V_ADC = V_BAT * R2/(R1+R2))
+
+# --- Vision / Camera ---
+
+CAMERA_TARGET_WIDTH = 320
+CAMERA_TARGET_HEIGHT = 240
+# Path to the YOLOv8n fire-detection model (.pt file).
+# Download a pre-trained fire/smoke model (e.g. from Roboflow) and place it here.
+# If the file does not exist the pipeline runs in YOLO-absent mode (fire_conf=0.0).
+YOLO_MODEL_PATH = os.path.join(os.path.dirname(__file__), "m4_vision", "models", "fire_yolov8n.pt")
+OBSTACLE_MODEL_PATH = os.path.join(os.path.dirname(__file__), "m4_vision", "models", "obstacle_yolov8n.pt")
+
+# COCO class IDs treated as navigable obstacles: person, chair, couch, plant, bed, table, tv
+OBSTACLE_CLASSES = [0, 56, 57, 58, 59, 60, 62]
+OBSTACLE_CONF_THRESHOLD = 0.40
 
 # --- Fusion Weights (must sum to 1.0) ---
 
