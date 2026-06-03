@@ -209,7 +209,7 @@ def test_drive_lateral_preserves_north_progress():
 
 
 def test_four_direction_scan_captures_each_heading():
-    """Verify that scan turns right for D and left for B, capturing both snapshots."""
+    """Checkpoint taraması: Yangın tespiti yalnızca Doğu ve Batı yönlerinde yapılır."""
     from m5_navigation.navigation import NavigationController
 
     captured = []
@@ -220,12 +220,11 @@ def test_four_direction_scan_captures_each_heading():
         nc = NavigationController(snapshot_callback=lambda lbl: captured.append(lbl))
         nc._scan_360(segment_id=1)
 
-    assert captured == [
-        "seg1-D",
-        "seg1-B",
-    ]
-    assert mock_turn_r.call_count == 2
-    assert mock_turn_l.call_count == 2
+    # Yangın tespiti yalnızca Doğu (D) ve Batı (B) yönlerinde yapılır.
+    # Kuzey'e dönüş adımlarında (adım 2 ve 4) kontrol yapılmaz.
+    assert captured == ["seg1-D", "seg1-B"], f"Beklenen: ['seg1-D', 'seg1-B'], Gelen: {captured}"
+    assert mock_turn_r.call_count == 2, "Sağa dönüş 2 kez olmalı (Doğu + Kuzey)"
+    assert mock_turn_l.call_count == 2, "Sola dönüş 2 kez olmalı (Kuzey + Batı)"
 
 
 def test_side_pass_detects_wall_via_front_sensor():

@@ -70,6 +70,11 @@ OBSTACLE_THRESHOLD_CM = 60.0   # below this → obstacle, trigger avoidance
 # Ucuz kameralarda görüntü gecikiyor; bu süre dolmadan yön kararı verilmez.
 OBSTACLE_CAMERA_SETTLE_S = 7.0
 
+# Checkpoint taramasında her yön için YOLO'nun yeterli kare işlemesi bekleme süresi (s).
+# Robot döndükten sonra: ~1s mekanik titreşim + ~3s YOLO (~15 kare @ 5 FPS) = 4s.
+# Yangın tespiti için minimum güvenli bekleme süresidir; Pi'de YOLO yavaşsa artırılabilir.
+SCAN_FIRE_SETTLE_S = 4.0
+
 # Side-pass dynamic clearance: clearance-side sensor must exceed D₀ + delta
 # to declare the obstacle cleared. D₀ is the front reading at detection time.
 OBSTACLE_CLEARANCE_DELTA_CM = 15.0
