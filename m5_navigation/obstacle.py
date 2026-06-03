@@ -34,7 +34,6 @@ import time
 import config
 import m2_motor
 import m3_sensors
-import m4_vision
 
 logger = logging.getLogger(__name__)
 
@@ -185,10 +184,6 @@ class ObstacleAvoidance:
         m2_motor.set_total_distance_cm(before)
 
     def _decide_direction(self) -> str:
-        hint = m4_vision.determine_turn_direction()
-        if hint in ("LEFT", "RIGHT"):
-            return hint
-
         reading = m3_sensors.get_navigation_sensors_filtered()
         return "RIGHT" if reading.right_cm > reading.left_cm else "LEFT"
 
