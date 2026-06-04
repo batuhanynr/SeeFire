@@ -1,94 +1,210 @@
+#!/usr/bin/env python3
 """
-Quick demo — run on your Mac to see M7 and M3 in action.
-No Raspberry Pi or hardware needed; all modules run in mock mode.
+SeeFire Demo Script - Sunum İçin
+=================================
+
+Kullanım: python demo.py
 """
 import json
 import os
 import sys
 import time
 
+# Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Force mock mode
+os.environ['SEEFIRE_FORCE_MOCK'] = '1'
 
 import config
 import m7_logging
 import m3_sensors
+import m4_vision
+from m2_motor import motor
+from m6_decision.decision import DecisionEngine
 
+# Demo data directory
 DATA_DIR = "./demo_data"
+config.DATA_DIR = DATA_DIR
 config.SQLITE_DB_PATH = os.path.join(DATA_DIR, "seefire.db")
 config.MAP_JSON_PATH = os.path.join(DATA_DIR, "map.json")
 config.SNAPSHOT_DIR = os.path.join(DATA_DIR, "snapshots")
 
 
-def demo_m7():
-    print("=" * 50)
-    print("M7 — Data Logging Demo")
-    print("=" * 50)
+def print_header(title: str):
+    print("\n" + "=" * 60)
+    print(f"  {title}")
+    print("=" * 60)
 
+
+def print_subheader(title: str):
+    print(f"\n▶ {title}")
+    print("-" * 40)
+
+
+def demo_config():
+    """M1: Konfigürasyon"""
+    print_header("M1: KONFİGÜRASYON")
+    print(f"Data Dir: {config.DATA_DIR}")
+    print(f"Waypoints: {len(config.WAYPOINTS)} nokta")
+    for i, (dist, sector) in enumerate(config.WAYPOINTS, 1):
+        print(f"  WP{i}: {dist} cm (Sektör {sector})")
+    print(f"\nFusion Weights: V={config.W_VISION}, S={config.W_SMOKE}, IR={config.W_IR}")
+    print(f"Thresholds: Smoke={config.SMOKE_THRESHOLD}, IR={config.IR_TEMP_THRESHOLD}°C")
+    print(f"Fusion Alarm: {config.FUSION_ALARM_THRESH}")
+    time.sleep(0.3)
+
+
+def demo_logging():
+    """M7: Logging"""
+    print_header("M7: LOGGING & VERİTABANI")
     m7_logging.init()
-
-    event = m7_logging.m7_event_t(
-        timestamp="2026-04-18T10:00:00Z",
-        event_type="INIT",
-        fusion_score=0.0,
-        sensor_data="{}",
-        snapshot_path="",
-    )
-    row_id = m7_logging.log_event(event)
-    print(f"  [+] Logged INIT event -> row id: {row_id}")
-
-    for i, etype in enumerate(["NAVIGATE", "WAYPOINT", "VERIFY", "ALARM"]):
-        e = m7_logging.m7_event_t(
-            timestamp=f"2026-04-18T10:0{i + 1}:00Z",
+    print("✓ SQLite başlatıldı")
+    
+    for i, etype in enumerate(["INIT", "NAVIGATE", "WAYPOINT", "VERIFY", "ALARM"]):
+        event = m7_logging.m7_event_t(
+            timestamp=f"2026-06-04T10:0{i}:00Z",
             event_type=etype,
-            fusion_score=round(0.3 + i * 0.15, 2),
-            sensor_data=json.dumps({"smoke": 100 + i * 100, "ir_temp": 30 + i * 10}),
+            fusion_score=round(0.2 + i * 0.15, 2),
+            sensor_data="{}",
             snapshot_path="",
         )
-        m7_logging.log_event(e)
-        print(f"  [+] Logged {etype} (score={e.fusion_score})")
-
-    print(f"\n  All events:")
-    for ev in m7_logging.get_events(limit=10):
-        print(f"    #{ev['id']} {ev['event_type']:12s} score={ev['fusion_score']}")
-
-    print(f"\n  ALARM events only:")
-    for ev in m7_logging.get_events(event_type="ALARM"):
-        print(f"    #{ev['id']} {ev['event_type']}")
-
-    sample_map = json.dumps({"grid_size": [40, 40], "resolution": 0.1, "cells": []})
-    m7_logging.save_map(sample_map)
-    loaded = m7_logging.load_map()
-    print(f"\n  [+] Map saved and loaded: {len(json.loads(loaded))} keys")
-
-    fake_jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 100
-    path = m7_logging.save_snapshot(fake_jpeg, 1)
-    size = os.path.getsize(path)
-    print(f"  [+] Snapshot saved: {path} ({size} bytes)")
-
-    os.remove(config.MAP_JSON_PATH)
-    print(f"  [+] load_map() after delete: {m7_logging.load_map()}")
+        m7_logging.log_event(event)
+        print(f"  [{etype}] score={event.fusion_score:.2f}")
+    
+    events = m7_logging.get_events(limit=3)
+    print(f"\n  Son {len(events)} event:")
+    for e in events:
+        print(f"    {e['event_type']}: {e['fusion_score']:.2f}")
+    time.sleep(0.3)
 
 
-def demo_m3():
-    print("\n" + "=" * 50)
-    print("M3 — Sensor Integration Demo (mock mode)")
-    print("=" * 50)
+def demo_motor():
+    """M2: Motor"""
+    print_header("M2: MOTOR KONTROL")
+    motor.init_hardware()
+    print("✓ Motor driver başlatıldı (L298N)")
+    
+    voltage = motor.get_battery_voltage()
+    print(f"  Battery: {voltage:.2f}V")
+    print(f"  Status: {'OK' if voltage >= config.BATTERY_LOW_V else 'LOW'}")
+    
+    print_subheader("Encoder Okuma")
+    for i in range(3):
+        ticks_l, ticks_r = motor.get_encoder_ticks()
+        print(f"  L={ticks_l:5d}, R={ticks_r:5d} ticks")
+        time.sleep(0.1)
+    time.sleep(0.3)
 
+
+def demo_sensors():
+    """M3: Sensörler"""
+    print_header("M3: SENSÖR ENTEGRASYONU")
     m3_sensors.init_sensors()
-
+    print("✓ Sensörler başlatıldı")
+    print("  - MQ-2 (Smoke), MLX90614 (IR), HC-SR04 x3")
+    
+    print_subheader("Fusion Sensörleri")
     fusion = m3_sensors.get_fusion_sensors()
-    print(f"  Fusion sensors: smoke={fusion.smoke_level}, ir_temp={fusion.ir_temp}C, alert={fusion.smoke_alert}")
-
+    print(f"  Smoke: {fusion.smoke_level:.1f}, IR: {fusion.ir_temp:.1f}°C")
+    print(f"  Alert: {fusion.smoke_alert}")
+    
+    print_subheader("Navigasyon Sensörleri")
     nav = m3_sensors.get_navigation_sensors()
-    print(f"  Navigation: left={nav.left_cm:.1f}cm, front={nav.front_cm:.1f}cm, right={nav.right_cm:.1f}cm")
+    print(f"  L: {nav.left_cm:5.1f}cm, F: {nav.front_cm:5.1f}cm, R: {nav.right_cm:5.1f}cm")
+    
+    if nav.front_cm < config.OBSTACLE_THRESHOLD_CM:
+        print(f"  ⚠️ ENGEL tespit edildi!")
+    time.sleep(0.3)
 
-    nav_f = m3_sensors.get_navigation_sensors_filtered(samples=3)
-    print(f"  Filtered nav: left={nav_f.left_cm:.1f}cm, front={nav_f.front_cm:.1f}cm, right={nav_f.right_cm:.1f}cm")
+
+def demo_vision():
+    """M4: Vision"""
+    print_header("M4: VISION & KAMERA")
+    m4_vision.init()
+    print("✓ Kamera başlatıldı")
+    
+    if os.path.exists(config.YOLO_MODEL_PATH):
+        print(f"✓ YOLO model: {os.path.basename(config.YOLO_MODEL_PATH)}")
+    
+    frame = m4_vision.capture_frame()
+    if frame is not None:
+        h, w = frame.shape[:2]
+        print(f"  Frame: {w}x{h}")
+    
+    hint = m4_vision.determine_turn_direction(frame)
+    print(f"  Turn hint: {hint if hint else 'none'}")
+    m4_vision.close()
+    time.sleep(0.3)
+
+
+def demo_navigation():
+    """M5: Navigasyon"""
+    print_header("M5: NAVIGASYON")
+    total = config.WAYPOINTS[-1][0]
+    print(f"  Hedef: {total} cm")
+    print(f"  Sektörler: {len(config.WAYPOINTS)}")
+    print("\n  Features:")
+    print("    ✓ Waypoint-based seyahat")
+    print("    ✓ Obstacle bypass")
+    print("    ✓ 3-yönlü tarama")
+    print("    ✓ Encoder odometri")
+    time.sleep(0.3)
+
+
+def demo_decision():
+    """M6: Decision Engine"""
+    print_header("M6: DECISION ENGINE")
+    print("✓ Decision Engine başlatıldı")
+    print("\n  FSM States:")
+    print("    INIT → NAVIGATE → VERIFY → ALARM → STOP")
+    
+    fusion = m3_sensors.get_fusion_sensors()
+    smoke_score = 1.0 if fusion.smoke_alert else 0.0
+    ir_score = min(1.0, max(0.0, (fusion.ir_temp - 40) / 40))
+    fusion_score = config.W_SMOKE * smoke_score + config.W_IR * ir_score
+    
+    print(f"\n  Fusion Score: {fusion_score:.2f}")
+    if fusion_score >= config.FUSION_ALARM_THRESH:
+        print(f"  🔴 ALARM!")
+    time.sleep(0.3)
+
+
+def cleanup():
+    print_header("CLEANUP")
+    motor.stop()
+    motor.cleanup()
+    m3_sensors.cleanup()
+    m4_vision.close()
+    print("✓ Kaynaklar temizlendi")
+
+
+def main():
+    print("\n╔══════════════════════════════════════════════════════════╗")
+    print("║          SeeFire Robot Demo - Sunum Modu               ║")
+    print("║           CSE 396 - Indoor Fire Detection              ║")
+    print("╚══════════════════════════════════════════════════════════╝")
+    
+    try:
+        demo_config()
+        demo_logging()
+        demo_motor()
+        demo_sensors()
+        demo_vision()
+        demo_navigation()
+        demo_decision()
+        cleanup()
+        
+        print_header("DEMO TAMAMLANDI ✓")
+        print("\n  - MOCK modda çalıştı")
+        print(f"  - Veri: {DATA_DIR}/")
+        
+    except Exception as e:
+        print(f"\n❌ Hata: {e}")
+        cleanup()
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    demo_m7()
-    demo_m3()
-    print("\n" + "=" * 50)
-    print("Demo complete. Check ./demo_data/ for output files.")
-    print("=" * 50)
+    sys.exit(main())

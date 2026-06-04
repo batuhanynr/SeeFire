@@ -83,6 +83,11 @@ left_cm, front_cm, right_cm = reading.left_cm, reading.front_cm, reading.right_c
 logger.info("[SENSÖR] Sol: %.1f | Ön: %.1f | Sağ: %.1f | Bypass: %s",
 left_cm, front_cm, right_cm, self.is_bypassing)
 
+		# Fusion sensörlerini de oku (ısı, duman)
+		fusion = m3_sensors.get_fusion_sensors()
+		logger.info("[FUSION] Smoke: %.0f | IR: %.1f°C | Alert: %s",
+			fusion.smoke_level, fusion.ir_temp, "⚠️" if fusion.smoke_alert else "✓")
+
 # ── ÖNCELİK 1: Engel kaçınma (HER DURUMDA, bypass dahil) ──
 if 0 < front_cm < OBSTACLE_THRESHOLD_CM:
 self._handle_immediate_obstacle(reading)

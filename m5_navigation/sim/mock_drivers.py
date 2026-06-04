@@ -35,6 +35,12 @@ def install_mock_drivers(world):
     m3_sensors.get_navigation_sensors          = _read
     m3_sensors.get_navigation_sensors_filtered = _filtered
 
+    def _front(samples: int = 2):
+        _, f, _ = world.sensor_readings()
+        return f
+
+    m3_sensors.get_front_distance = _front
+
     # ----- m4_vision -----
     m4_vision.determine_turn_direction = lambda frame=None: world.turn_hint
     m4_vision.capture_frame            = lambda: None
