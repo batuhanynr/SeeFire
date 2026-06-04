@@ -27,7 +27,28 @@ except ImportError as e:
 
 # Engele çarpmayı önlemek için durma eşiği (cm)
 # Robotun hızı ve eylemsizliği (braking lag) nedeniyle varsayılan 30cm yetersiz kalabiliyor.
-OBSTACLE_STOP_THRESHOLD_CM = 60.0
+OBSTACLE_STOP_THRESHOLD_CM = 70.0
+
+
+def turn_right_100():
+    """Sağa 100 derece pivot dönüşü gerçekleştirir.
+    90 derece dönüş süresini referans alarak 100 dereceye oranlar.
+    """
+    turn_time = (100.0 / 90.0) * config.MOCK_TURN_90_SECONDS
+    kick_speed = getattr(config, "TURN_KICK_SPEED", config.TURN_SPEED)
+    kick_time = getattr(config, "TURN_KICK_SECONDS", 0.0)
+    run_speed = config.TURN_SPEED
+
+    print(f"  [Dönüş] Sağa 100° pivot dönüşü başladı (Süre: {turn_time:.2f} sn)...")
+    if kick_time > 0 and turn_time > kick_time:
+        m2_motor.motor_turn(1.0, kick_speed)
+        time.sleep(kick_time)
+        m2_motor.motor_turn(1.0, run_speed)
+        time.sleep(turn_time - kick_time)
+    else:
+        m2_motor.motor_turn(1.0, run_speed)
+        time.sleep(turn_time)
+    m2_motor.stop()
 
 
 def main():
@@ -71,9 +92,9 @@ def main():
                 break
             time.sleep(0.1)
 
-        # 2. Sağa 90 derece dön
-        print("[TEST] Sağa 90° dönülüyor...")
-        m2_motor.turn_right_90()
+        # 2. Sağa 100 derece dön
+        print("[TEST] Sağa 100° dönülüyor...")
+        turn_right_100()
         time.sleep(1.0)
 
         # Dönüş sonrası sol sensörün ilk mesafesini al (engele bakan taraf)
