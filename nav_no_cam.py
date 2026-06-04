@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """
-SeeFire — Akıllı Engel Geçme (Basit Mantık)
-==============================================
+SeeFire — Akıllı Engel Geçme
+=============================
 
-Robot engeli tespit eder → en geniş tarafa 90° dön → sürekli ileri
-Ters sensör ilk mesafeden +45cm geçince → 90° geri dön → devam
+1. Engel yoksa → 15sn ilerle → dur → sağa 90° bak 2sn → 180° sola bak 2sn → sağa 90° dön → tekrarla
+2. Engel varsa (< 60cm) → dur → en geniş tarafa 90° dön → ilerle
+Ters sensör (dönmeden önceki mesafe + 45cm) geçerse → tersine 90° dön → rota devam
+3. Ön 600+cm → ufak ilerle → sol/sağ değişimine göre çaprazlık tespiti → düzelt
+4. Yan duvar < 20cm → mikro düzeltme
+5. Engel tespiti HER ZAMAN en üst öncelikte
 
 Kullanım (Pi üzerinde):
-    python3 nav_no_cam.py
+python3 nav_no_cam.py
 """
 from __future__ import annotations
 
@@ -20,370 +24,385 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config
 
 try:
-    import m2_motor
-    import m3_sensors
+import m2_motor
+import m3_sensors
 except ImportError as e:
-    print(f"HATA: Modül yüklenemedi: {e}")
-    sys.exit(1)
+print(f"HATA: Modül yüklenemedi: {e}")
+sys.exit(1)
 
 # ── Logging ayarı ─────────────────────────────────────────────────────
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%H:%M:%S'
+level=logging.INFO,
+format='%(asctime)s [%(levelname)s] %(message)s',
+datefmt='%H:%M:%S'
 )
 logger = logging.getLogger(__name__)
 
 # ── Sabitler ─────────────────────────────────────────────────────────────
-MIN_CLEARANCE_CM = 45.0              # Min boşluk
-OBSTACLE_THRESHOLD_CM = 60.0        # Engel algılama eşiği
-EXTRA_CLEARANCE_CM = 45.0           # Ters sensör için ek mesafe (ilk dönüş + 45cm)
-SCAN_INTERVAL_SEC = 15.0            # Tarama aralığı
-LOOK_DURATION_SEC = 2.0             # Bakış süresi
-OPEN_FRONT_CM = 600.0               # Ön sensör bu değer üstü → açık koridor / sensör hatası
-CENTER_TOLERANCE_CM = 15.0          # Sol-sağ fark toleransı (ortalamada)
-CENTER_NUDGE_DEG = 10               # Ortalama için mikro dönüş açısı
-WALL_TOO_CLOSE_CM = 20.0            # Duvar bu mesafeden yakınsa düzelt
-WALL_NUDGE_DEG = 8                  # Duvardan kaçınma mikro dönüş açısı
+OBSTACLE_THRESHOLD_CM = 60.0 # Engel algılama eşiği
+EXTRA_CLEARANCE_CM = 45.0 # Ters sensör için ek mesafe (ilk mesafe + 45cm)
+SCAN_INTERVAL_SEC = 15.0 # Tarama sürüş süresi
+LOOK_DURATION_SEC = 2.0 # Bakış süresi
+OPEN_FRONT_CM = 600.0 # Ön sensör bu değer üstü → çaprazlık kontrolü
+
+WALL_TOO_CLOSE_CM = 20.0 # Duvar bu mesafeden yakınsa düzelt
+WALL_NUDGE_DEG = 8 # Duvardan kaçınma mikro dönüş açısı
+DIAGONAL_CHECK_CM = 10.0 # Çaprazlık kontrolü için ilerleme mesafesi
+DIAGONAL_DELTA_THRESHOLD_CM = 5.0 # Sol/sağ değişim eşiği (çaprazlık tespiti)
+DIAGONAL_NUDGE_DEG = 10 # Çaprazlık düzeltme açısı
 
 
 class NavigationBot:
-    """Akıllı engel geçme robotu."""
+"""Akıllı engel geçme robotu."""
 
-    def __init__(self):
-        self.turn_start_distance = 0.0  # İlk dönüşteki ters sensör mesafesi
-        self.is_bypassing = False          # Bypass modunda mı?
-        self.bypass_direction = None      # Bypass yönü
-        self.last_scan_time = 0.0        # Son tarama zamanı
-        self.start_time = 0.0           # Başlangıç zamanı
+def __init__(self):
+self.last_scan_time = 0.0
+self.start_time = 0.0
+self.is_bypassing = False
+self.bypass_direction = None
+self.turn_start_distance = 0.0 # Dönmeden önce ters sensör mesafesi
 
-    def run(self):
-        """Ana döngü (sonsuz, Ctrl+C ile dur)."""
-        logger.info("=" * 60)
-        logger.info("  AKILLI ENGEL GEÇME BAŞLIYOR")
-        logger.info("  Ctrl+C ile durdur")
-        logger.info("=" * 60)
+def run(self):
+"""Ana döngü."""
+logger.info("=" * 60)
+logger.info(" AKILLI ENGEL GEÇME BAŞLIYOR")
+logger.info(" Ctrl+C ile durdur")
+logger.info("=" * 60)
 
-        self.start_time = time.time()
-        self.last_scan_time = self.start_time
+self.start_time = time.time()
+self.last_scan_time = time.time()
 
-        self._drive_with_acceleration(config.DRIVE_SPEED)
+self._drive_with_acceleration(config.DRIVE_SPEED)
 
-        try:
-            while True:
-                elapsed = time.time() - self.start_time
+try:
+while True:
+# Sensörleri oku
+reading = m3_sensors.get_navigation_sensors_filtered(samples=3)
+left_cm, front_cm, right_cm = reading.left_cm, reading.front_cm, reading.right_cm
 
-                # Sensörleri oku
-                reading = m3_sensors.get_navigation_sensors_filtered(samples=3)
-                left_cm, front_cm, right_cm = reading.left_cm, reading.front_cm, reading.right_cm
+logger.info("[SENSÖR] Sol: %.1f | Ön: %.1f | Sağ: %.1f | Bypass: %s",
+left_cm, front_cm, right_cm, self.is_bypassing)
 
-                logger.info("[SENSÖR] Sol: %.1f | Ön: %.1f | Sağ: %.1f | Bypass: %s",
-                           left_cm, front_cm, right_cm, self.is_bypassing)
+# ── ÖNCELİK 1: Engel kaçınma (HER DURUMDA, bypass dahil) ──
+if 0 < front_cm < OBSTACLE_THRESHOLD_CM:
+self._handle_immediate_obstacle(reading)
+continue
 
-                # ── ÖNCELİK 1: Engel kaçınma (HER DURUMDA, bypass dahil) ──
-                if 0 < front_cm < OBSTACLE_THRESHOLD_CM:
-                    self._handle_immediate_obstacle(reading)
-                    continue
+# ── ÖNCELİK 2: Yan duvar çok yakın ──
+if self._wall_too_close(left_cm, right_cm):
+self._handle_wall_correction(left_cm, right_cm)
+continue
 
-                # ── ÖNCELİK 2: Yan duvar çok yakın → ufak manevrayla uzaklaş ──
-                if self._wall_too_close(left_cm, right_cm):
-                    self._handle_wall_correction(left_cm, right_cm)
-                    continue
+# ── ÖNCELİK 3: Bypass modu → ters sensör kontrolü ──
+if self.is_bypassing:
+self._handle_bypassing(reading)
+time.sleep(0.02)
+continue
 
-                # ── ÖNCELİK 3: Ön açık koridor / sensör hatası → ortala ──
-                if front_cm >= OPEN_FRONT_CM or front_cm <= 0:
-                    self._handle_center_correction(reading)
-                    continue
+# ── ÖNCELİK 4: Ön 600+cm → çaprazlık kontrolü ──
+if front_cm >= OPEN_FRONT_CM or front_cm <= 0:
+self._handle_diagonal_check(reading)
+continue
 
-                # Bypass modundaysak
-                if self.is_bypassing:
-                    self._handle_bypassing(reading)
+# ── ÖNCELİK 5: 15sn tarama ──
+if time.time() - self.last_scan_time >= SCAN_INTERVAL_SEC:
+self._perform_scan()
+self.last_scan_time = time.time()
 
-                # Normal sürüş: tarama zamanlaması
-                if elapsed - self.last_scan_time >= SCAN_INTERVAL_SEC:
-                    self._perform_scan()
-                    self.last_scan_time = elapsed
+time.sleep(0.02)
 
-                time.sleep(0.05)
+except KeyboardInterrupt:
+logger.info("\nCtrl+C ile durduruldu.")
+finally:
+m2_motor.stop()
 
-        except KeyboardInterrupt:
-            logger.info("\nCtrl+C ile durduruldu.")
-        finally:
-            m2_motor.stop()
+# ────────────────────────────────────────────────────────────────
+# ENGEL KAÇINMA
+# ────────────────────────────────────────────────────────────────
+def _handle_immediate_obstacle(self, reading):
+"""Engel algılandı → dur → yön seç → 90° dön → ilerle."""
+logger.warning("[ENGEL] Ön: %.1f cm. DURDURULUYOR...", reading.front_cm)
 
-    def _handle_immediate_obstacle(self, reading):
-        """Engel algılandı → dur → yön seç → dön → ileri."""
-        logger.warning("[ENGEL] Ön: %.1f cm. DURDURULUYOR...", reading.front_cm)
+m2_motor.stop()
+time.sleep(1.0)
 
-        # Dur + 2sn bekle
-        m2_motor.stop()
-        time.sleep(2.0)
+# Yeniden ölçüm
+reading = m3_sensors.get_navigation_sensors_filtered(samples=3)
 
-        # Yeniden ölçüm al
-        reading = m3_sensors.get_navigation_sensors_filtered(samples=3)
+if not (0 < reading.front_cm < OBSTACLE_THRESHOLD_CM):
+logger.info("[ENGEL] Yanlış alarm (%.1f cm). Devam.", reading.front_cm)
+self._drive_with_acceleration(config.DRIVE_SPEED)
+return
 
-        if 0 < reading.front_cm < OBSTACLE_THRESHOLD_CM:
-            # Hâlâ engel var → manevra başlat
-            left_cm, front_cm, right_cm = reading.left_cm, reading.front_cm, reading.right_cm
+left_cm = reading.left_cm
+right_cm = reading.right_cm
 
-            logger.warning("[ENGEL] Hâlâ engel: %.1f cm. Bypass başlatılıyor...", front_cm)
+# En geniş tarafı seç
+direction = self._choose_direction(left_cm, right_cm)
+logger.warning("[ENGEL] Teyit edildi. Bypass yönü: %s", direction)
 
-            # En geniş tarafı seç
-            direction = self._choose_direction(left_cm, right_cm)
-            logger.info("[ENGEL] Karar: %s tarafına dönlüyor.", direction)
+# 90° dön
+if direction == "RIGHT":
+m2_motor.turn_right_90()
+opposite_sensor = left_cm # Sağa döndük → ters sensör = sol
+else:
+m2_motor.turn_left_90()
+opposite_sensor = right_cm # Sola döndük → ters sensör = sağ
 
-            if direction == "RIGHT":
-                m2_motor.turn_right_90()
-                opposite_sensor = reading.left_cm
-            else:
-                m2_motor.turn_left_90()
-                opposite_sensor = reading.right_cm
+# Dönmeden önceki ters sensör mesafesini kaydet
+self.turn_start_distance = opposite_sensor
+self.is_bypassing = True
+self.bypass_direction = direction
 
-            # İlk dönüşteki ters sensör mesafesini kaydet
-            self.turn_start_distance = opposite_sensor
-            self.is_bypassing = True
-            self.bypass_direction = direction
+logger.info("[ENGEL] Bypass başladı. Yön: %s, İlk ters mesafe: %.1f cm",
+direction, self.turn_start_distance)
 
-            # Timer'ı sıfırla (engel tespit edildi, 15sn geri sayım başlat)
-            self.last_scan_time = time.time()
-            logger.info("[ENGEL] Bypass başladı. Timer sıfırlandı. İlk ters mesafe: %.1f cm",
-                       self.turn_start_distance)
+# Timer sıfırla
+self.last_scan_time = time.time()
 
-            # Motor başlat (sürekli ileri)
-            self._drive_with_acceleration(config.DRIVE_SPEED)
+# İvmeli kalkış
+self._drive_with_acceleration(config.DRIVE_SPEED)
 
-        else:
-            # Yanlış alarm → sürüşe devam
-            logger.info("[ENGEL] Yanlış alarm (%.1f cm). Sürüşe devam.", reading.front_cm)
-            self._drive_with_acceleration(config.DRIVE_SPEED)
+# ────────────────────────────────────────────────────────────────
+# BYPASS KONTROL
+# ────────────────────────────────────────────────────────────────
+def _handle_bypassing(self, reading):
+"""Bypass sırasında: ters sensör (ilk mesafe + 45cm) geçti mi?"""
+if self.bypass_direction == "RIGHT":
+opposite_sensor = reading.left_cm
+else:
+opposite_sensor = reading.right_cm
 
-    def _wall_too_close(self, left_cm: float, right_cm: float) -> bool:
-        """Sol veya sağ duvar 20cm'den yakın mı?"""
-        return (0 < left_cm < WALL_TOO_CLOSE_CM) or (0 < right_cm < WALL_TOO_CLOSE_CM)
+target_distance = self.turn_start_distance + EXTRA_CLEARANCE_CM
 
-    def _handle_wall_correction(self, left_cm: float, right_cm: float):
-        """Duvara çok yakınsa → dur → ufak mikro dön → devam et."""
-        # Hangi taraf yakın?
-        left_close = 0 < left_cm < WALL_TOO_CLOSE_CM
-        right_close = 0 < right_cm < WALL_TOO_CLOSE_CM
+logger.info("[BYPASS] Ters sensör: %.1f cm (Hedef: > %.1f cm)",
+opposite_sensor, target_distance)
 
-        if left_close and not right_close:
-            # Sol duvar yakın → sağa kaydır (duvardan uzaklaş)
-            logger.warning("[DUVAR] Sol çok yakın: %.1f cm. Sağa kaydırılıyor...", left_cm)
-            m2_motor.stop()
-            time.sleep(0.2)
-            m2_motor.motor_turn(WALL_NUDGE_DEG, config.TURN_SPEED)
-            time.sleep(0.2)
+if opposite_sensor > target_distance:
+# Engel geçildi! Tersine 90° dön
+logger.info("[BYPASS] Engel geçildi! %.1f cm > %.1f cm. Geri dön...",
+opposite_sensor, target_distance)
 
-        elif right_close and not left_close:
-            # Sağ duvar yakın → sola kaydır (duvardan uzaklaş)
-            logger.warning("[DUVAR] Sağ çok yakın: %.1f cm. Sola kaydırılıyor...", right_cm)
-            m2_motor.stop()
-            time.sleep(0.2)
-            m2_motor.motor_turn(-WALL_NUDGE_DEG, config.TURN_SPEED)
-            time.sleep(0.2)
+m2_motor.stop()
+time.sleep(0.5)
 
-        elif left_close and right_close:
-            # İki taraf da yakın → dar geçit, hangisi daha yakınsa ondan uzaklaş
-            if left_cm < right_cm:
-                logger.warning("[DUVAR] İki taraf yakın (Sol: %.1f, Sağ: %.1f). Sağa kaydır...",
-                              left_cm, right_cm)
-                m2_motor.stop()
-                time.sleep(0.2)
-                m2_motor.motor_turn(WALL_NUDGE_DEG, config.TURN_SPEED)
-                time.sleep(0.2)
-            else:
-                logger.warning("[DUVAR] İki taraf yakın (Sol: %.1f, Sağ: %.1f). Sola kaydır...",
-                              left_cm, right_cm)
-                m2_motor.stop()
-                time.sleep(0.2)
-                m2_motor.motor_turn(-WALL_NUDGE_DEG, config.TURN_SPEED)
-                time.sleep(0.2)
+if self.bypass_direction == "RIGHT":
+m2_motor.turn_left_90()
+else:
+m2_motor.turn_right_90()
 
-        # Manevradan sonra sürüşe devam
-        self._drive_with_acceleration(config.DRIVE_SPEED)
+# Bypass bitti
+self.is_bypassing = False
+self.bypass_direction = None
 
-    def _handle_center_correction(self, reading):
-        """Ön sensör 600+ cm veya geçersiz → dur → sol/sağ ortala."""
-        logger.info("[MERKEZ] Ön: %.1f cm (açık/geçersiz). Sol/sağ kontrol...",
-                   reading.front_cm)
+self.last_scan_time = time.time()
+logger.info("[BYPASS] Tamamlandı. DRIVING mod.")
 
-        m2_motor.stop()
-        time.sleep(0.5)
+self._drive_with_acceleration(config.DRIVE_SPEED)
 
-        left_cm = reading.left_cm
-        right_cm = reading.right_cm
+# ────────────────────────────────────────────────────────────────
+# YAN DUVAR KONTROL
+# ────────────────────────────────────────────────────────────────
+def _wall_too_close(self, left_cm: float, right_cm: float) -> bool:
+"""Sol veya sağ duvar 20cm'den yakın mı?"""
+return (0 < left_cm < WALL_TOO_CLOSE_CM) or (0 < right_cm < WALL_TOO_CLOSE_CM)
 
-        # İki sensör de geçersizse → devam
-        if left_cm <= 0 and right_cm <= 0:
-            logger.info("[MERKEZ] Sol/sağ geçersiz. Devam.")
-            self._drive_with_acceleration(config.DRIVE_SPEED)
-            return
+def _handle_wall_correction(self, left_cm: float, right_cm: float):
+"""Duvara çok yakınsa → dur → mikro dön → devam."""
+left_close = 0 < left_cm < WALL_TOO_CLOSE_CM
+right_close = 0 < right_cm < WALL_TOO_CLOSE_CM
 
-        # Geçerli olanları kullan
-        left_ok = left_cm if left_cm > 0 else right_cm
-        right_ok = right_cm if right_cm > 0 else left_cm
+m2_motor.stop()
+time.sleep(0.2)
 
-        diff = left_ok - right_ok
+if left_close and not right_close:
+logger.warning("[DUVAR] Sol yakın: %.1f cm → sağa kaydır", left_cm)
+m2_motor.motor_turn(WALL_NUDGE_DEG, config.TURN_SPEED)
+elif right_close and not left_close:
+logger.warning("[DUVAR] Sağ yakın: %.1f cm → sola kaydır", right_cm)
+m2_motor.motor_turn(-WALL_NUDGE_DEG, config.TURN_SPEED)
+elif left_close and right_close:
+if left_cm < right_cm:
+logger.warning("[DUVAR] İki taraf yakın. Sol daha yakın → sağa kaydır")
+m2_motor.motor_turn(WALL_NUDGE_DEG, config.TURN_SPEED)
+else:
+logger.warning("[DUVAR] İki taraf yakın. Sağ daha yakın → sola kaydır")
+m2_motor.motor_turn(-WALL_NUDGE_DEG, config.TURN_SPEED)
 
-        logger.info("[MERKEZ] Sol: %.1f | Sağ: %.1f | Fark: %.1f cm",
-                   left_ok, right_ok, diff)
+time.sleep(0.2)
+self._drive_with_acceleration(config.DRIVE_SPEED)
 
-        if abs(diff) > CENTER_TOLERANCE_CM:
-            # Merkezde değil → küçük düzeltme
-            if diff > 0:
-                # Sol uzak, sağ yakın → sağa kaydır
-                logger.info("[MERKEZ] Sağa kaydır (%.0f°)...", CENTER_NUDGE_DEG)
-                m2_motor.motor_turn(CENTER_NUDGE_DEG, config.TURN_SPEED)
-            else:
-                # Sağ uzak, sol yakın → sola kaydır
-                logger.info("[MERKEZ] Sola kaydır (%.0f°)...", CENTER_NUDGE_DEG)
-                m2_motor.motor_turn(-CENTER_NUDGE_DEG, config.TURN_SPEED)
+# ────────────────────────────────────────────────────────────────
+# ÇAPRAZLIK KONTROL (ön 600+cm)
+# ────────────────────────────────────────────────────────────────
+def _handle_diagonal_check(self, reading):
+"""
+Ön sensör 600+cm veya geçersiz → çaprazlık tespiti.
+Ufak ilerle → sol/sağ değişimine bak → çaprazsa düzelt.
+Makul mesafelerde (200 vs 180 gibi) düzeltme yapma.
+"""
+logger.info("[ÇAPRAZ] Ön: %.1f cm. Çaprazlık kontrolü...", reading.front_cm)
 
-            time.sleep(0.3)
-        else:
-            logger.info("[MERKEZ] Merkezde ✓")
+m2_motor.stop()
+time.sleep(0.3)
 
-        # Devam et
-        self._drive_with_acceleration(config.DRIVE_SPEED)
+# Mevcut sol/sağ kaydet
+before_left = reading.left_cm if reading.left_cm > 0 else 999.0
+before_right = reading.right_cm if reading.right_cm > 0 else 999.0
 
-    def _handle_bypassing(self, reading):
-        """Bypass modundayken: ters sensör kontrol → geçti mi?"""
-        if self.bypass_direction == "RIGHT":
-            opposite_sensor = reading.left_cm
-        else:
-            opposite_sensor = reading.right_cm
+# Ufak ilerle
+m2_motor.drive_distance_cm(DIAGONAL_CHECK_CM)
+time.sleep(0.3)
 
-        target_distance = self.turn_start_distance + EXTRA_CLEARANCE_CM
+# Sonra ölç
+after = m3_sensors.get_navigation_sensors_filtered(samples=3)
+after_left = after.left_cm if after.left_cm > 0 else 999.0
+after_right = after.right_cm if after.right_cm > 0 else 999.0
 
-        logger.info("[BYPASS] Ters sensör: %.1f cm (Hedef: > %.1f cm)",
-                   opposite_sensor, target_distance)
+delta_left = before_left - after_left # Pozitif = sol daralıyor
+delta_right = before_right - after_right # Pozitif = sağ daralıyor
 
-        if opposite_sensor > target_distance:
-            # Engel geçildi! Geri dön
-            logger.info("[BYPASS] Ters sensör temiz! %.1f cm > %.1f cm. Geri dön...",
-                       opposite_sensor, target_distance)
+logger.info("[ÇAPRAZ] Önce Sol: %.1f Sağ: %.1f → Sonra Sol: %.1f Sağ: %.1f",
+before_left, before_right, after_left, after_right)
+logger.info("[ÇAPRAZ] Delta Sol: %.1f | Delta Sağ: %.1f", delta_left, delta_right)
 
-            m2_motor.stop()
-            time.sleep(0.5)
+# Makul mesafe kontrolü: 200 vs 180 gibi → düzeltme gereksiz
+both_reasonable = (before_left > WALL_TOO_CLOSE_CM and before_right > WALL_TOO_CLOSE_CM)
+close_side = min(before_left, before_right)
+far_side = max(before_left, before_right)
+ratio_ok = (far_side < close_side * 1.5) if close_side > 0 else True
 
-            # Geri dön
-            if self.bypass_direction == "RIGHT":
-                m2_motor.turn_left_90()
-            else:
-                m2_motor.turn_right_90()
+if both_reasonable and ratio_ok:
+logger.info("[ÇAPRAZ] Mesafeler makul. Düzeltme gereksiz. Devam.")
+self._drive_with_acceleration(config.DRIVE_SPEED)
+return
 
-            # Bypass bitti
-            self.is_bypassing = False
-            self.bypass_direction = None
+# Çaprazlık tespiti
+corrected = False
 
-            # Timer'ı sıfırla (engel geçme bitti, 15sn geri sayım)
-            self.last_scan_time = time.time()
-            logger.info("[BYPASS] Engel geçildi. Timer sıfırlandı. DRIVING mod.")
+# Sol daralıyor → sağa doğru gidiyoruz → sola dön
+if delta_left > DIAGONAL_DELTA_THRESHOLD_CM:
+logger.warning("[ÇAPRAZ] Sol duvar daralıyor (%.1f cm). Sola düzelt...",
+delta_left)
+m2_motor.motor_turn(-DIAGONAL_NUDGE_DEG, config.TURN_SPEED)
+corrected = True
 
-            # Motor başlat
-            self._drive_with_acceleration(config.DRIVE_SPEED)
+# Sağ daralıyor → sola doğru gidiyoruz → sağa dön
+elif delta_right > DIAGONAL_DELTA_THRESHOLD_CM:
+logger.warning("[ÇAPRAZ] Sağ duvar daralıyor (%.1f cm). Sağa düzelt...",
+delta_right)
+m2_motor.motor_turn(DIAGONAL_NUDGE_DEG, config.TURN_SPEED)
+corrected = True
 
-    def _perform_scan(self):
-        """Tarama: dur → sağa bak → sola bak → ileri."""
-        logger.info("[TARAMA] Tarama başlıyor...")
+if corrected:
+time.sleep(0.3)
+# Düzelttikten sonra tekrar kontrol etmek için ufak ilerle
+m2_motor.drive_distance_cm(DIAGONAL_CHECK_CM)
+time.sleep(0.3)
 
-        # Dur
-        m2_motor.stop()
+recheck = m3_sensors.get_navigation_sensors_filtered(samples=3)
+logger.info("[ÇAPRAZ] Düzeltme sonrası Sol: %.1f | Sağ: %.1f",
+recheck.left_cm, recheck.right_cm)
 
-        # Sağa bak
-        logger.info("[TARAMA] Sağa bak...")
-        m2_motor.turn_right_90()
-        time.sleep(LOOK_DURATION_SEC)
-        reading_right = m3_sensors.get_navigation_sensors_filtered()
-        logger.info("[TARAMA] Sağ yön: Sol=%.1f Ön=%.1f Sağ=%.1f",
-                   reading_right.left_cm, reading_right.front_cm, reading_right.right_cm)
+self._drive_with_acceleration(config.DRIVE_SPEED)
 
-        # Sola bak (180° toplam)
-        logger.info("[TARAMA] Sola bak...")
-        m2_motor.turn_left_90()
-        m2_motor.turn_left_90()
-        time.sleep(LOOK_DURATION_SEC)
-        reading_left = m3_sensors.get_navigation_sensors_filtered()
-        logger.info("[TARAMA] Sol yön: Sol=%.1f Ön=%.1f Sağ=%.1f",
-                   reading_left.left_cm, reading_left.front_cm, reading_left.right_cm)
+# ────────────────────────────────────────────────────────────────
+# TARAMA (15sn sürüş → sağ 90° 2sn → sol 180° 2sn → sağ 90°)
+# ────────────────────────────────────────────────────────────────
+def _perform_scan(self):
+"""15sn sürüş sonrası: dur → sağa 90° bak 2sn → 180° sola bak 2sn → sağa 90° dön."""
+logger.info("[TARAMA] Duruluyor...")
 
-        # Öne dön
-        m2_motor.turn_right_90()
+m2_motor.stop()
 
-        # Sürüşe devam
-        self._drive_with_acceleration(config.DRIVE_SPEED)
-        logger.info("[TARAMA] Tarama bitti, sürüşe devam.")
+# Sağa 90° dön
+logger.info("[TARAMA] Sağa 90° bak...")
+m2_motor.turn_right_90()
+time.sleep(LOOK_DURATION_SEC)
+reading_right = m3_sensors.get_navigation_sensors_filtered()
+logger.info("[TARAMA] Sağ yön: Sol=%.1f Ön=%.1f Sağ=%.1f",
+reading_right.left_cm, reading_right.front_cm, reading_right.right_cm)
 
-    def _choose_direction(self, left_cm: float, right_cm: float) -> str:
-        """En geniş tarafı seç."""
-        left_ok = left_cm if left_cm > 0 else 999.0
-        right_ok = right_cm if right_cm > 0 else 999.0
+# 180° sola dön (sağ bakış pozisyonundan → tam sola bak)
+logger.info("[TARAMA] 180° sola bak...")
+m2_motor.turn_left_90()
+m2_motor.turn_left_90()
+time.sleep(LOOK_DURATION_SEC)
+reading_left = m3_sensors.get_navigation_sensors_filtered()
+logger.info("[TARAMA] Sol yön: Sol=%.1f Ön=%.1f Sağ=%.1f",
+reading_left.left_cm, reading_left.front_cm, reading_left.right_cm)
 
-        if right_ok > left_ok:
-            return "RIGHT"
-        else:
-            return "LEFT"
+# Sağa 90° dön (tekrar kuzeye bak)
+logger.info("[TARAMA] Sağa 90° dön (kuzeye)...")
+m2_motor.turn_right_90()
 
-    def _drive_with_acceleration(self, target_speed: int):
-        """İvme ile kalkış (yavaş)."""
-        logger.info("[KALKIŞ] İvme ile kalkış → %%%d PWM", target_speed)
-        steps = 10          # Daha fazla adım
-        for i in range(1, steps + 1):
-            speed = int(target_speed * i / steps)
-            m2_motor.motor_drive("forward", speed)
-            time.sleep(0.2)   # Daha uzun bekleme (yavaş ivme)
-        logger.info("[KALKIŞ] Tam hıza ulaşıldı.")
+self._drive_with_acceleration(config.DRIVE_SPEED)
+logger.info("[TARAMA] Bitti, sürüşe devam.")
+
+# ────────────────────────────────────────────────────────────────
+# YARDIMCILAR
+# ────────────────────────────────────────────────────────────────
+def _choose_direction(self, left_cm: float, right_cm: float) -> str:
+"""En geniş tarafı seç."""
+left_ok = left_cm if left_cm > 0 else 999.0
+right_ok = right_cm if right_cm > 0 else 999.0
+return "RIGHT" if right_ok > left_ok else "LEFT"
+
+def _drive_with_acceleration(self, target_speed: int):
+"""İvme ile kalkış."""
+logger.info("[KALKIŞ] İvme ile → %%%d PWM", target_speed)
+steps = 10
+for i in range(1, steps + 1):
+speed = int(target_speed * i / steps)
+m2_motor.motor_drive("forward", speed)
+time.sleep(0.2)
+logger.info("[KALKIŞ] Tam hız.")
 
 
 def main():
-    print()
-    print("╔════════════════════════════════════════════════════════════╗")
-    print("║     SeeFire — Akıllı Engel Geçme (Basit)              ║")
-    print("╚════════════════════════════════════════════════════════════╝")
-    print()
-    print("Algoritma:")
-    print("  1. Engel tespit → dur → yön seç → 90° dön")
-    print("  2. Sürekli ileri (adım adım değil)")
-    print("  3. Ters sensör > ilk_mesafe + 45cm → 90° geri dön")
-    print()
+print()
+print("╔════════════════════════════════════════════════════════════╗")
+print("║ SeeFire — Akıllı Engel Geçme ║")
+print("╚════════════════════════════════════════════════════════════╝")
+print()
+print("Akış:")
+print(" 1. 15sn ilerle → sağ 90° bak 2sn → 180° sol bak 2sn → sağ 90° → tekrar")
+print(" 2. Engel (< 60cm) → dur → geniş tarafa 90° → ilerle")
+print(" 3. Ters sensör (ilk + 45cm) geçerse → ters 90° → rota devam")
+print(" 4. Ön 600+ → çaprazlık kontrolü")
+print(" 5. Yan < 20cm → mikro düzeltme")
+print()
 
-    if not os.getenv("SEEFIRE_FORCE_MOCK"):
-        try:
-            import RPi.GPIO
-        except ImportError:
-            print("UYARI: RPi.GPIO yok — mock modda çalışacak.")
+if not os.getenv("SEEFIRE_FORCE_MOCK"):
+try:
+import RPi.GPIO
+except ImportError:
+print("UYARI: RPi.GPIO yok — mock modda çalışacak.")
 
-    print("Donanım başlatılıyor...")
-    m2_motor.init_hardware()
-    m3_sensors.init_sensors()
-    time.sleep(0.5)
+print("Donanım başlatılıyor...")
+m2_motor.init_hardware()
+m3_sensors.init_sensors()
+time.sleep(0.5)
 
-    print()
-    input("Robot hazır. ENTER ile başlat... ")
-    print()
+print()
+input("Robot hazır. ENTER ile başlat... ")
+print()
 
-    try:
-        bot = NavigationBot()
-        bot.run()  # Sonsuz döngü
-
-        print()
-        print("=" * 60)
-        print("  BİTTİ!")
-        print("=" * 60)
-
-    except KeyboardInterrupt:
-        print("\n\nCtrl+C ile durduruldu.")
-    except Exception as e:
-        print(f"\n\nHATA: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        print("\nTemizleniyor...")
-        m2_motor.cleanup()
-        m3_sensors.cleanup()
-        print("Bitti.")
+try:
+bot = NavigationBot()
+bot.run()
+except KeyboardInterrupt:
+print("\n\nCtrl+C ile durduruldu.")
+except Exception as e:
+print(f"\n\nHATA: {e}")
+import traceback
+traceback.print_exc()
+finally:
+print("\nTemizleniyor...")
+m2_motor.cleanup()
+m3_sensors.cleanup()
+print("Bitti.")
 
 
 if __name__ == "__main__":
-    main()
+main()
