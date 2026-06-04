@@ -25,12 +25,12 @@ Donanım:
 Gerekli:
     Pi üzerinde çalıştırılmalı (RPi.GPIO gerekli).
 """
+import os
 import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import os
 import config
 
 

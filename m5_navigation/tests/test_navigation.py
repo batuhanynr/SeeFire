@@ -43,8 +43,10 @@ def test_obstacle_avoidance_direction_decision():
     oa = ObstacleAvoidance(pv)
     
     # 1. Camera says LEFT
-    with patch('m4_vision.determine_turn_direction', return_value="LEFT"):
-        assert oa._decide_direction() == "LEFT"
+    mock_reading_similar = MagicMock(left_cm=30.0, right_cm=30.0)
+    with patch('m4_vision.determine_turn_direction', return_value="LEFT"), \
+         patch('m3_sensors.get_navigation_sensors_filtered', return_value=mock_reading_similar):
+        assert oa._choose_open_side() == "LEFT"
         
     # 2. Camera says NONE, ultrasonic says RIGHT is clearer
     mock_reading = MagicMock()
@@ -53,7 +55,7 @@ def test_obstacle_avoidance_direction_decision():
     
     with patch('m4_vision.determine_turn_direction', return_value=None), \
          patch('m3_sensors.get_navigation_sensors_filtered', return_value=mock_reading):
-        assert oa._decide_direction() == "RIGHT"
+        assert oa._choose_open_side() == "RIGHT"
 
 @patch('m2_motor.get_total_distance_cm', return_value=150.0)
 @patch('m2_motor.motor.MotorM2.set_total_distance_cm')
@@ -132,7 +134,7 @@ def test_side_pass_clears_at_dynamic_threshold():
             sector_id=1, direction="RIGHT", reference_distance=15.0
         )
         assert wall_hit is False
-        assert traveled == config.SIDE_STEP_CM * 2   # one step taken before clear, plus one extra safety step
+        assert traveled == config.SIDE_STEP_CM * 4   # one step taken before clear, plus 3 extra safety steps
  
 
 def test_forward_pass_clears_when_side_sensor_passes_obstacle():
@@ -208,24 +210,25 @@ def test_drive_lateral_preserves_north_progress():
         mock_set.assert_called_once_with(42.0)
 
 
-def test_four_direction_scan_captures_each_heading():
-    """360° tarama 4 snapshot (K/D/G/B) ve 4 sağa dönüş yapar."""
+def test_three_direction_scan_captures_each_heading():
+    """3 yönlü tarama 3 snapshot (ön/sağ/sol) ve ilgili dönüşleri yapar."""
     from m5_navigation.navigation import NavigationController
 
     captured = []
     with patch('m2_motor.stop'), \
-         patch('m2_motor.turn_right_90') as mock_turn, \
+         patch('m2_motor.turn_right_90') as mock_turn_r, \
+         patch('m2_motor.turn_left_90') as mock_turn_l, \
          patch('time.sleep'):
         nc = NavigationController(snapshot_callback=lambda lbl: captured.append(lbl))
-        nc._scan_360(segment_id=1)
+        nc._scan_three_directions(segment_id=1)
 
     assert captured == [
-        "seg1-K",
-        "seg1-D",
-        "seg1-G",
-        "seg1-B",
+        "seg1-on",
+        "seg1-sag",
+        "seg1-sol",
     ]
-    assert mock_turn.call_count == 4   # 4×90° = tam tur
+    assert mock_turn_r.call_count == 2
+    assert mock_turn_l.call_count == 2
 
 
 def test_side_pass_detects_wall_via_front_sensor():
