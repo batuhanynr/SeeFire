@@ -135,11 +135,28 @@ VDIV_R2           = 10000.0 # 10k Ohm (V_ADC = V_BAT * R2/(R1+R2))
 
 CAMERA_TARGET_WIDTH = 320
 CAMERA_TARGET_HEIGHT = 240
-# Path to the YOLOv8n fire-detection model (.pt file).
-# Download a pre-trained fire/smoke model (e.g. from Roboflow) and place it here.
-# If the file does not exist the pipeline runs in YOLO-absent mode (fire_conf=0.0).
-YOLO_MODEL_PATH = os.path.join(os.path.dirname(__file__), "m4_vision", "models", "fire_yolov8n.pt")
-OBSTACLE_MODEL_PATH = os.path.join(os.path.dirname(__file__), "m4_vision", "models", "obstacle_yolov8n.pt")
+
+# ONNX Runtime ve ONNX model dosyası varlığı kontrolü
+_ONNX_SUPPORTED = False
+try:
+    import onnxruntime
+    _ONNX_SUPPORTED = True
+except ImportError:
+    pass
+
+_FIRE_PT_PATH = os.path.join(os.path.dirname(__file__), "m4_vision", "models", "fire_yolov8n.pt")
+_FIRE_ONNX_PATH = _FIRE_PT_PATH.replace(".pt", ".onnx")
+if _ONNX_SUPPORTED and os.path.exists(_FIRE_ONNX_PATH):
+    YOLO_MODEL_PATH = _FIRE_ONNX_PATH
+else:
+    YOLO_MODEL_PATH = _FIRE_PT_PATH
+
+_OBSTACLE_PT_PATH = os.path.join(os.path.dirname(__file__), "m4_vision", "models", "obstacle_yolov8n.pt")
+_OBSTACLE_ONNX_PATH = _OBSTACLE_PT_PATH.replace(".pt", ".onnx")
+if _ONNX_SUPPORTED and os.path.exists(_OBSTACLE_ONNX_PATH):
+    OBSTACLE_MODEL_PATH = _OBSTACLE_ONNX_PATH
+else:
+    OBSTACLE_MODEL_PATH = _OBSTACLE_PT_PATH
 
 # COCO class IDs treated as navigable obstacles: person, chair, couch, plant, bed, table, tv
 OBSTACLE_CLASSES = [0, 56, 57, 58, 59, 60, 62]
