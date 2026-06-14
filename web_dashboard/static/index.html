@@ -90,6 +90,11 @@
                             <span class="state-dot"></span>
                             <span class="state-name">OFFLINE</span>
                         </div>
+                        <div class="motion-strip">
+                            <span>Hareket</span>
+                            <strong id="manual-command">STOP</strong>
+                            <small id="manual-mode">Pasif</small>
+                        </div>
                         <div id="fsm-desc" class="fsm-desc">Bağlantı bekleniyor…</div>
                     </div>
                 </section>
@@ -117,7 +122,7 @@
                 </section>
 
                 <!-- Sensor Cards Grid -->
-                <div class="sensor-grid">
+                <div class="sensor-grid telemetry-grid">
                     <div class="card card-sensor" id="card-temp">
                         <div class="sensor-icon-wrap"><span class="sensor-icon">🌡️</span></div>
                         <div class="sensor-body">
@@ -161,6 +166,50 @@
                             <div class="sensor-val-row">
                                 <span id="val-distance" class="sensor-value mono">--</span>
                                 <span class="sensor-unit">cm</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card card-sensor" id="card-front">
+                        <div class="sensor-icon-wrap"><span class="sensor-icon">⬆️</span></div>
+                        <div class="sensor-body">
+                            <span class="sensor-label">Ön Mesafe</span>
+                            <div class="sensor-val-row">
+                                <span id="val-front" class="sensor-value mono">--</span>
+                                <span class="sensor-unit">cm</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card card-sensor" id="card-side">
+                        <div class="sensor-icon-wrap"><span class="sensor-icon">↔️</span></div>
+                        <div class="sensor-body">
+                            <span class="sensor-label">Sol / Sağ</span>
+                            <div class="sensor-val-row">
+                                <span id="val-sides" class="sensor-value mono">--</span>
+                                <span class="sensor-unit">cm</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card card-sensor" id="card-battery">
+                        <div class="sensor-icon-wrap"><span class="sensor-icon">🔋</span></div>
+                        <div class="sensor-body">
+                            <span class="sensor-label">Batarya</span>
+                            <div class="sensor-val-row">
+                                <span id="val-battery" class="sensor-value mono">--</span>
+                                <span class="sensor-unit">V</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card card-sensor" id="card-motor">
+                        <div class="sensor-icon-wrap"><span class="sensor-icon">⚙️</span></div>
+                        <div class="sensor-body">
+                            <span class="sensor-label">Motor L/R</span>
+                            <div class="sensor-val-row">
+                                <span id="val-motor" class="sensor-value mono">--</span>
+                                <span class="sensor-unit">PWM</span>
                             </div>
                         </div>
                     </div>

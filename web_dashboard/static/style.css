@@ -302,6 +302,22 @@ body {
     border-radius: 4px;
     border: 1px solid var(--border);
 }
+.camera-placeholder.mock-camera {
+    background:
+        radial-gradient(circle at 50% 42%, rgba(255,107,53,0.20), transparent 18%),
+        linear-gradient(135deg, rgba(16,185,129,0.08), rgba(59,130,246,0.08)),
+        repeating-linear-gradient(90deg, transparent 0 28px, rgba(255,255,255,0.035) 28px 30px),
+        repeating-linear-gradient(0deg, transparent 0 28px, rgba(255,255,255,0.035) 28px 30px);
+}
+.camera-placeholder.mock-camera::after {
+    content: "MOCK VIDEO FEED";
+    position: absolute;
+    left: 1rem;
+    bottom: 1rem;
+    color: rgba(237,240,247,0.42);
+    font: 800 0.7rem var(--font-mono);
+    letter-spacing: 0.18em;
+}
 
 @keyframes float {
     0%, 100% { transform: translateY(0); }
@@ -405,6 +421,32 @@ body {
     color: var(--text-muted);
     text-align: center;
 }
+.motion-strip {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.65rem;
+    width: min(100%, 420px);
+    margin: 0.4rem auto 0;
+    border: 1px solid rgba(59,130,246,0.18);
+    border-radius: var(--radius-sm);
+    background: linear-gradient(135deg, rgba(59,130,246,0.10), rgba(255,107,53,0.06));
+    padding: 0.55rem 0.75rem;
+}
+.motion-strip span,
+.motion-strip small {
+    color: var(--text-muted);
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.motion-strip strong {
+    color: var(--text-primary);
+    font: 900 1.05rem var(--font-mono);
+    letter-spacing: 0.10em;
+    text-align: center;
+}
 
 /* ── Fusion Score ──────────────────────────────────────────── */
 .fusion-value {
@@ -457,12 +499,18 @@ body {
     grid-template-columns: 1fr 1fr;
     gap: 0.7rem;
 }
+.telemetry-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+}
 
 .card-sensor {
-    padding: 0.7rem 0.8rem;
+    min-height: 112px;
+    padding: 0.95rem 1rem;
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
+    justify-content: space-between;
+    gap: 0.45rem;
     position: relative;
     overflow: hidden;
 }
@@ -501,7 +549,7 @@ body {
     gap: 0.25rem;
 }
 .sensor-value {
-    font-size: 1.25rem;
+    font-size: clamp(1.15rem, 2.2vw, 1.65rem);
     font-weight: 700;
     color: var(--text-primary);
     line-height: 1.1;
@@ -818,7 +866,8 @@ body {
     .grid-top {
         grid-template-columns: 1fr;
     }
-    .sensor-grid {
+    .sensor-grid,
+    .telemetry-grid {
         grid-template-columns: 1fr 1fr;
     }
     .config-grid {
@@ -830,7 +879,8 @@ body {
     html { font-size: 13px; }
     #dashboard-header { padding: 0.5rem 0.8rem; }
     #dashboard-main { padding: 0.8rem; }
-    .sensor-grid {
+    .sensor-grid,
+    .telemetry-grid {
         grid-template-columns: 1fr;
     }
     .config-grid {

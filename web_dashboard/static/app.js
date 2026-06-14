@@ -1,4 +1,5 @@
 const POLL_MS = 1000;
+const SNAPSHOT_POLL_MS = 10000;
 
 const stateDescriptions = {
     OFFLINE: "Robot prosesi veya M7 veritabani henuz veri uretmiyor.",
@@ -20,6 +21,11 @@ const stateClasses = {
 
 let configLoaded = false;
 let cameraStarted = false;
+let manualEnabled = false;
+const activeManualKeys = new Set();
+let lastManualCommand = "STOP";
+let lastSnapshotSignature = "";
+let manualHeartbeatTimer = null;
 
 function $(id) {
     return document.getElementById(id);
@@ -156,6 +162,18 @@ function updateClock() {
 }
 
 function updateCamera(status) {
+    if (status.manual_mock) {
+        const img = $("camera-feed");
+        const placeholder = $("camera-placeholder");
+        const badge = $("camera-status");
+        if (img) img.removeAttribute("src");
+        placeholder?.classList.remove("hidden");
+        placeholder?.classList.add("mock-camera");
+        if (badge) badge.textContent = "Mock kamera";
+        cameraStarted = true;
+        return;
+    }
+
     if (cameraStarted) return;
 
     const host = window.location.hostname || "localhost";
@@ -212,6 +230,21 @@ function updateSensors(status) {
     setText("val-smoke", smoke ? String(Math.round(smoke)) : "--");
     setText("val-fire", fire ? String(Math.round(fire * 100)) : "--");
     setText("val-distance", distance ? distance.toFixed(1) : "--");
+    setText("val-front", s.front_cm !== undefined && s.front_cm !== null ? Number(s.front_cm).toFixed(1) : "--");
+    setText(
+        "val-sides",
+        s.left_cm !== undefined && s.left_cm !== null && s.right_cm !== undefined && s.right_cm !== null
+            ? `${Number(s.left_cm).toFixed(0)} / ${Number(s.right_cm).toFixed(0)}`
+            : "--",
+    );
+    setText("val-battery", s.battery_v !== undefined && s.battery_v !== null ? Number(s.battery_v).toFixed(2) : "--");
+    setText(
+        "val-motor",
+        s.left_pwm !== undefined && s.right_pwm !== undefined
+            ? `${Number(s.left_pwm).toFixed(0)} / ${Number(s.right_pwm).toFixed(0)}`
+            : "--",
+    );
+    setText("manual-command", s.command || "STOP");
 
     setMiniBar("bar-temp", temp, 80);
     setMiniBar("bar-smoke", smoke, 4095);
@@ -226,6 +259,15 @@ function updateSensors(status) {
         if (fireSideOverlay) fireSideOverlay.textContent = s.fire_side || "FIRE";
     } else {
         overlay?.classList.add("hidden");
+    }
+}
+
+function syncManualUi(status) {
+    manualEnabled = Boolean(status.manual_mock || status.manual_live);
+    if (status.manual_live) {
+        setText("manual-mode", "CANLI GPIO - W/A/S/D + SPACE + P");
+    } else {
+        setText("manual-mode", manualEnabled ? "W/A/S/D + SPACE + P" : "Canlı veri");
     }
 }
 
@@ -308,6 +350,21 @@ function updateSnapshots(snapshots) {
     }).join("");
 }
 
+async function refreshSnapshots(force = false) {
+    try {
+        const snapshotData = await fetchJson("/api/snapshots?limit=80");
+        const snapshots = Array.isArray(snapshotData.snapshots) ? snapshotData.snapshots : [];
+        const signature = snapshots
+            .map((snapshot) => `${snapshot.filename || snapshot.url}:${snapshot.mtime || snapshot.size_bytes || ""}`)
+            .join("|");
+        if (!force && signature === lastSnapshotSignature) return;
+        lastSnapshotSignature = signature;
+        updateSnapshots(snapshots);
+    } catch {
+        setText("snapshot-count", "snapshot okunamadi");
+    }
+}
+
 function renderConfig(config) {
     const grid = $("config-grid");
     if (!grid) return;
@@ -355,25 +412,110 @@ async function refreshConfigOnce() {
 
 async function refresh() {
     try {
-        const [status, events, snapshotData] = await Promise.all([
+        const [status, events] = await Promise.all([
             fetchJson("/api/status"),
             fetchJson("/api/events?limit=30"),
-            fetchJson("/api/snapshots?limit=80"),
         ]);
 
         updateCamera(status);
+        syncManualUi(status);
         setBadge("robot-badge", Boolean(status.robot_running), status.robot_running ? "Robot ON" : "Robot OFF");
         setBadge("connection-badge", Boolean(status.connected), status.connected ? "DB LIVE" : "DB WAIT");
         updateState(status);
         updateFusion(status);
         updateSensors(status);
         updateEvents(Array.isArray(events) ? events : []);
-        updateSnapshots(Array.isArray(snapshotData.snapshots) ? snapshotData.snapshots : []);
         setText("last-update-footer", `Son guncelleme: ${new Date().toLocaleTimeString("tr-TR", { hour12: false })}`);
         await refreshConfigOnce();
     } catch (err) {
         setBadge("connection-badge", false, "API OFF");
         setText("fsm-desc", `Panel API okunamadi: ${err.message}`);
+    }
+}
+
+function commandFromKeys() {
+    const forward = activeManualKeys.has("w");
+    const backward = activeManualKeys.has("s");
+    const left = activeManualKeys.has("a");
+    const right = activeManualKeys.has("d");
+    if (forward && left) return "FORWARD_LEFT";
+    if (forward && right) return "FORWARD_RIGHT";
+    if (forward) return "FORWARD";
+    if (backward) return "BACKWARD";
+    if (left && !right) return "LEFT";
+    if (right && !left) return "RIGHT";
+    return "STOP";
+}
+
+async function sendManualCommand(command, force = false) {
+    if (!manualEnabled && command !== "STOP") return;
+    if (!force && command === lastManualCommand) return;
+    lastManualCommand = command;
+    setText("manual-command", command);
+    try {
+        await fetch("/api/manual/command", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ command }),
+        });
+    } catch (err) {
+        setText("manual-command", "LINK ERR");
+    }
+}
+
+function handleManualKeyDown(event) {
+    const key = event.key.toLowerCase();
+    if (!["w", "a", "s", "d", " ", "p"].includes(key)) return;
+    if (!manualEnabled) return;
+    event.preventDefault();
+    if (key === "p") {
+        captureManualSnapshot();
+        return;
+    }
+    if (key === " ") {
+        activeManualKeys.clear();
+        sendManualCommand("STOP");
+        return;
+    }
+    activeManualKeys.add(key);
+    sendManualCommand(commandFromKeys());
+}
+
+function handleManualKeyUp(event) {
+    const key = event.key.toLowerCase();
+    if (!["w", "a", "s", "d"].includes(key)) return;
+    if (!manualEnabled) return;
+    event.preventDefault();
+    activeManualKeys.delete(key);
+    sendManualCommand(commandFromKeys());
+}
+
+function startManualHeartbeat() {
+    if (manualHeartbeatTimer) return;
+    manualHeartbeatTimer = setInterval(() => {
+        if (!manualEnabled || activeManualKeys.size === 0) return;
+        sendManualCommand(commandFromKeys(), true);
+    }, 150);
+}
+
+function stopManualInput() {
+    if (!manualEnabled) return;
+    activeManualKeys.clear();
+    sendManualCommand("STOP", true);
+}
+
+async function captureManualSnapshot() {
+    if (!manualEnabled) return;
+    setText("snapshot-count", "snapshot alınıyor...");
+    try {
+        const response = await fetch("/api/manual/snapshot", { method: "POST" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const result = await response.json();
+        setText("snapshot-count", result.message || (result.ok ? "snapshot alındı" : "snapshot başarısız"));
+        await refresh();
+        await refreshSnapshots(true);
+    } catch (err) {
+        setText("snapshot-count", `snapshot hata: ${err.message}`);
     }
 }
 
@@ -391,7 +533,7 @@ async function clearSnapshots() {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const result = await response.json();
         setText("snapshot-count", `${result.deleted || 0} silindi`);
-        await refresh();
+        await refreshSnapshots(true);
     } catch (err) {
         alert(`Snapshot temizleme başarısız: ${err.message}`);
     } finally {
@@ -403,7 +545,17 @@ async function clearSnapshots() {
 }
 
 updateClock();
+window.addEventListener("keydown", handleManualKeyDown);
+window.addEventListener("keyup", handleManualKeyUp);
+window.addEventListener("blur", stopManualInput);
+window.addEventListener("pagehide", stopManualInput);
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden) stopManualInput();
+});
 $("clear-snapshots")?.addEventListener("click", clearSnapshots);
 setInterval(updateClock, 1000);
+startManualHeartbeat();
 refresh();
+refreshSnapshots(true);
 setInterval(refresh, POLL_MS);
+setInterval(refreshSnapshots, SNAPSHOT_POLL_MS);
