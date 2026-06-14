@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SeeFire — Indoor Fire-Detection Robot</title>
+<meta name="description" content="SeeFire — a Raspberry Pi indoor fire-detection robot. CSE 396, Group 4." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="grain" aria-hidden="true"></div>
+
+<!-- ───────────────────────── NAV ───────────────────────── -->
+<header class="nav">
+  <a class="nav__mark" href="#top">
+    <span class="ember-dot" aria-hidden="true"></span>SeeFire
+  </a>
+  <nav class="nav__links">
+    <a href="#what">Project</a>
+    <a href="#hardware">Hardware</a>
+    <a href="#logic">Logic</a>
+    <a href="#field">Field</a>
+    <a href="#team">Team</a>
+  </nav>
+</header>
+
+<main id="top">
+
+  <!-- ───────────────────────── HERO ───────────────────────── -->
+  <section class="hero">
+    <div class="hero__copy">
+      <p class="kicker reveal">CSE 396 · Group 4 · 2026</p>
+      <h1 class="wordmark reveal" style="--d:.08s">
+        See<span class="wordmark__fire">Fire</span><span class="wordmark__dot" aria-hidden="true"></span>
+      </h1>
+      <p class="hero__lead reveal" style="--d:.34s">
+        An autonomous indoor robot that drives a fixed route, watches for
+        flame and smoke, and raises the alarm.
+      </p>
+      <div class="hero__actions reveal" style="--d:.44s">
+        <a class="cta" href="#field">
+          Watch it move <span aria-hidden="true">→</span>
+        </a>
+        <a class="cta cta--ghost" href="https://github.com/batuhanynr/SeeFire" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+          Source on GitHub
+        </a>
+      </div>
+    </div>
+    <figure class="hero__media reveal" style="--d:.24s">
+      <img src="robot-angle.jpg" alt="SeeFire robot" />
+      <figcaption><span class="mono">01</span> Prototype</figcaption>
+    </figure>
+  </section>
+
+  <!-- ───────────────────────── MARQUEE ───────────────────────── -->
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee__track">
+      <span>FLAME</span><span class="sep">·</span><span>SMOKE</span><span class="sep">·</span><span>HEAT</span><span class="sep">·</span>
+      <span>NAVIGATE</span><span class="sep">·</span><span>DETECT</span><span class="sep">·</span><span>ALARM</span><span class="sep">·</span>
+      <span>FLAME</span><span class="sep">·</span><span>SMOKE</span><span class="sep">·</span><span>HEAT</span><span class="sep">·</span>
+      <span>NAVIGATE</span><span class="sep">·</span><span>DETECT</span><span class="sep">·</span><span>ALARM</span><span class="sep">·</span>
+    </div>
+  </div>
+
+  <!-- ───────────────────────── WHAT ───────────────────────── -->
+  <section class="block" id="what">
+    <p class="section-no mono reveal">02 — Concept</p>
+    <div class="what__grid">
+      <h2 class="lede reveal">
+        A Raspberry&nbsp;Pi on wheels that patrols a known floor plan and fuses
+        three senses into one verdict: <em>fire</em>, or clear.
+      </h2>
+      <ul class="senses">
+        <li class="reveal" style="--d:.05s"><span class="mono">vision</span>camera watches for flame &amp; smoke</li>
+        <li class="reveal" style="--d:.12s"><span class="mono">smoke</span>MQ-2 gas sensor reads the air</li>
+        <li class="reveal" style="--d:.19s"><span class="mono">heat</span>MLX90614 measures surface temperature</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── HARDWARE ───────────────────────── -->
+  <section class="block block--soft" id="hardware">
+    <p class="section-no mono reveal">03 — Hardware</p>
+    <div class="hw__head">
+      <h2 class="reveal">Built on a Raspberry&nbsp;Pi 4. No Arduino — every pin driven straight off the GPIO header.</h2>
+      <figure class="hw__media reveal" style="--d:.1s">
+        <img src="robot-front.jpg" alt="SeeFire robot, front" loading="lazy" />
+        <figcaption><span class="mono">02</span> Front · sonar + camera</figcaption>
+      </figure>
+    </div>
+
+    <!-- grouped detail -->
+    <div class="hw__groups">
+
+      <article class="hw reveal">
+        <header><span class="mono">DRIVE</span><h3>Locomotion</h3></header>
+        <dl>
+          <div><dt>Chassis</dt><dd>4WD double-deck acrylic, 4 DC gear motors (FL·FR·RL·RR)</dd></div>
+          <div><dt>Drivers</dt><dd>2× L298N — front + rear, signals wired in parallel</dd></div>
+          <div><dt>Steering</dt><dd>Tank turn · differential, PWM on GPIO12 / GPIO13 @ 1 kHz</dd></div>
+          <div><dt>Odometry</dt><dd>2× wheel encoders (GPIO6 / GPIO7) · 20 ticks/cm</dd></div>
+        </dl>
+      </article>
+
+      <article class="hw reveal" style="--d:.06s">
+        <header><span class="mono">SENSE</span><h3>Perception</h3></header>
+        <dl>
+          <div><dt>Range</dt><dd>3× HC-SR04 sonar — left · front · right, ECHO via 1k/2k divider (~3.18 V)</dd></div>
+          <div><dt>Smoke</dt><dd>MQ-2 gas → MCP3008 ADC CH0 (SPI) · 60 s warm-up</dd></div>
+          <div><dt>Heat</dt><dd>MLX90614 IR thermometer · I²C 0x5A · trip at 60 °C</dd></div>
+          <div><dt>Vision</dt><dd>Logitech C270 USB camera · 640×480 capture</dd></div>
+        </dl>
+      </article>
+
+      <article class="hw reveal" style="--d:.12s">
+        <header><span class="mono">POWER</span><h3>Power &amp; alarm</h3></header>
+        <dl>
+          <div><dt>Battery</dt><dd>LiPo 2S 7.4 V · low 6.8 V / critical 6.4 V (divider-sensed)</dd></div>
+          <div><dt>Logic</dt><dd>LM2596 buck → 5.0 V to the Pi, isolated from motor rail</dd></div>
+          <div><dt>Alarm</dt><dd>LED on GPIO26 (330 Ω) + active buzzer on GPIO19</dd></div>
+          <div><dt>Compute</dt><dd>Raspberry Pi 4 · BCM GPIO · I²C + SPI buses</dd></div>
+        </dl>
+      </article>
+
+      <article class="hw reveal" style="--d:.18s">
+        <header><span class="mono">CODE</span><h3>Software</h3></header>
+        <dl>
+          <div><dt>Stack</dt><dd>Python · 7 modules (M1–M7), parallel ownership</dd></div>
+          <div><dt>Navigation</dt><dd>Waypoint sector traversal · start-position verify · median-filtered sonar</dd></div>
+          <div><dt>Decision</dt><dd>FSM: INIT → NAVIGATE → VERIFY → ALARM → STOP · weighted sensor fusion</dd></div>
+          <div><dt>Logging</dt><dd>SQLite (WAL) events + JPEG snapshots · runs in mock mode off-robot</dd></div>
+        </dl>
+      </article>
+
+    </div>
+
+    <div class="modules">
+      <span class="reveal">M1 Chassis</span>
+      <span class="reveal">M2 Motors</span>
+      <span class="reveal">M3 Sensors</span>
+      <span class="reveal">M4 Vision</span>
+      <span class="reveal">M5 Navigation</span>
+      <span class="reveal">M6 Decision</span>
+      <span class="reveal">M7 Logging</span>
+    </div>
+  </section>
+
+  <!-- ───────────────────────── DECISION ENGINE / FSM ───────────────────────── -->
+  <section class="block" id="logic">
+    <p class="section-no mono reveal">04 — Decision engine</p>
+    <div class="fsm__head">
+      <h2 class="reveal">One loop, five states. Sensors fuse into a single score; the score moves the machine.</h2>
+      <p class="fsm__note reveal" style="--d:.08s">
+        <span class="mono">fusion = 0.5·vision + 0.3·smoke + 0.2·heat</span>
+        — cross the alarm threshold and the robot stops to verify before it commits to the alarm.
+      </p>
+    </div>
+
+    <figure class="fsm reveal" style="--d:.05s">
+      <svg viewBox="0 0 1040 460" role="img" aria-label="SeeFire decision engine state machine: INIT to NAVIGATE to VERIFY to ALARM, with returns to NAVIGATE and a STOP terminal.">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#a39c92" />
+          </marker>
+          <marker id="arrE" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#e5481d" />
+          </marker>
+        </defs>
+
+        <!-- edges -->
+        <g class="fsm-edge">
+          <path d="M188,106 H260" marker-end="url(#arr)"/>
+          <path d="M428,106 H512" marker-end="url(#arr)"/>
+          <path d="M680,106 H812" marker-end="url(#arrE)"/>
+          <!-- VERIFY -> NAVIGATE (not confirmed), arc above -->
+          <path d="M596,70 C596,18 348,18 348,68" marker-end="url(#arr)"/>
+          <!-- ALARM -> NAVIGATE (risk cleared), low arc -->
+          <path class="e-ember" d="M900,142 C900,232 432,232 432,144" marker-end="url(#arr)"/>
+          <!-- NAVIGATE -> STOP (route complete) -->
+          <path d="M344,142 V296" marker-end="url(#arr)"/>
+          <!-- battery critical -> STOP -->
+          <path class="e-dash" d="M624,336 H432" marker-end="url(#arr)"/>
+        </g>
+
+        <!-- edge labels -->
+        <g class="fsm-elabel">
+          <text x="224" y="96" text-anchor="middle">ready</text>
+          <text x="470" y="96" text-anchor="middle">score ≥ alarm</text>
+          <text x="746" y="96" text-anchor="middle" fill="#e5481d">confirmed</text>
+          <text x="472" y="14" text-anchor="middle">not confirmed</text>
+          <text x="666" y="226" text-anchor="middle">risk cleared</text>
+          <text x="356" y="226" text-anchor="start">route complete</text>
+          <text x="640" y="328" text-anchor="start">any state · battery critical</text>
+        </g>
+
+        <!-- nodes -->
+        <g class="fsm-node">
+          <g><rect x="28"  y="70"  width="160" height="72" rx="9"/><text x="108" y="112">INIT</text></g>
+          <g><rect x="260" y="70"  width="168" height="72" rx="9"/><text x="344" y="112">NAVIGATE</text></g>
+          <g><rect x="512" y="70"  width="168" height="72" rx="9"/><text x="596" y="112">VERIFY</text></g>
+          <g class="n-alarm"><rect x="812" y="70" width="168" height="72" rx="9"/><text x="896" y="112">ALARM</text></g>
+          <g class="n-stop"><rect x="260" y="300" width="168" height="72" rx="9"/><text x="344" y="342">STOP</text></g>
+        </g>
+      </svg>
+      <figcaption><span class="mono">M6</span> Finite-state machine · <code>m6_decision/decision.py</code></figcaption>
+    </figure>
+  </section>
+
+  <!-- ───────────────────────── FIELD / VIDEOS ───────────────────────── -->
+  <section class="block block--soft" id="field">
+    <p class="section-no mono reveal">05 — In the field</p>
+    <div class="films">
+      <figure class="film reveal">
+        <video src="drive-test.mp4" muted loop playsinline preload="metadata"></video>
+        <figcaption><span class="mono">▶</span> Drive test · full route</figcaption>
+      </figure>
+      <figure class="film reveal" style="--d:.08s">
+        <video src="spin.mp4" muted loop playsinline preload="metadata"></video>
+        <figcaption><span class="mono">▶</span> In-place turn</figcaption>
+      </figure>
+      <figure class="film reveal" style="--d:.16s">
+        <video src="smoke-test.mp4" muted loop playsinline preload="metadata"></video>
+        <figcaption><span class="mono">▶</span> Smoke detect · MQ-2</figcaption>
+      </figure>
+      <figure class="film reveal" style="--d:.24s">
+        <video src="temp-test.mp4" muted loop playsinline preload="metadata"></video>
+        <figcaption><span class="mono">▶</span> Heat detect · MLX90614</figcaption>
+      </figure>
+    </div>
+    <p class="hint mono reveal">tap to play</p>
+  </section>
+
+</main>
+
+<!-- ───────────────────────── FOOTER / TEAM ───────────────────────── -->
+<footer class="footer" id="team">
+  <div class="footer__top">
+    <span class="ember-dot ember-dot--lg" aria-hidden="true"></span>
+    <p class="footer__word">SeeFire</p>
+  </div>
+  <p class="section-no mono">06 — Group 4</p>
+  <ul class="roster">
+    <li>Emre Can Tuncer</li>
+    <li>Batuhan Yanar</li>
+    <li>Ahmet Furkan Arslan</li>
+    <li>Alperen Şahin</li>
+    <li>Semih Sarıkoca</li>
+    <li>Yusuf Alperen Çelik</li>
+    <li>Bekir Emre Sarıpınar</li>
+    <li>Halil Buğra Şen</li>
+  </ul>
+  <p class="footer__fine mono">CSE 396 · Spring 2025–2026 · Indoor fire-detection robot</p>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
